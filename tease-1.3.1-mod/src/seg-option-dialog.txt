@@ -1,0 +1,151 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #--------------
+  # OPTION DIALOG 
+  #--------------
+
+  # to be sourced directly into the teasegui namespace
+
+   proc LaunchOptionDialog {top} {
+      global opt
+      variable var
+      variable default
+
+      if {[winfo exists .option]} {destroy .option}
+
+# to set default options?  to apply to current as well?
+# search option checkboxes : regexp, case sensitive
+# wrap default : word, char, none
+# MODE default : single, separate
+#   options in search bar saved as defaults or options.
+#   "will apply at next startup" notice for mode change.
+
+     # set our default "tmp" variables
+      set opt(casesensitive) $default(casesensitive)
+      set opt(regexp)        $default(regexp)
+
+
+      toplevel .option
+      wm withdraw .option
+      wm transient .option $top
+      wm protocol .option WM_DELETE_WINDOW teasegui::DestroyOptionWindow
+
+     # dialog control button row
+      pack [
+         frame .option.b -bd 2 -relief ridge
+      ] -side bottom -fill x -padx 3 -pady 3
+
+      pack [
+         button .option.b.apply -width 10 -text Apply \
+            -command [list teasegui::SetOptionsFromDialog]
+      ] -side right
+
+      pack [
+         button .option.b.cancel -width 10 -text Cancel -command teasegui::DestroyOptionWindow
+      ] -side right
+
+      pack [
+         button .option.b.ok -width 10 -text OK \
+            -command [list teasegui::DestroyOptionWindow teasegui::SetOptionsFromDialog]
+      ] -side right
+
+
+     # color buttons and such
+      pack [
+         frame .option.f -bd 2 -relief groove
+      ] -side top -fill both -padx 3 -pady 3 -ipady 5 -ipadx 20
+
+      grid [
+         label .option.f.lab01 -text "default wrap mode:"
+      ] -row 0 -column 0 -sticky e
+
+      grid [
+         droplist::droplist .option.f.wrap \
+            -listvariable var(wrapmodes) -width 12
+      ] -row 0 -column 1 -sticky w -pady 5 -padx 5
+      droplist::Set .option.f.wrap $default(wrapmode)
+
+
+      grid [
+         label .option.f.lab02 -text "default window mode:"
+      ] -row 1 -column 0 -sticky e
+
+      grid [
+         droplist::droplist .option.f.mode \
+            -listvariable var(viewmodes) -width 12
+      ] -row 1 -column 1 -sticky w -pady 5 -padx 5
+      droplist::Set .option.f.mode $default(viewmode)
+
+
+      grid [
+         checkbutton .option.f.case \
+            -variable opt(casesensitive) \
+            -text "default case sensitive search"
+      ] -row 2 -column 0 -columnspan 2 -sticky w
+
+      grid [
+         checkbutton .option.f.reg \
+            -variable opt(regexp) \
+            -text "default regular expression search"
+      ] -row 3 -column 0 -columnspan 2 -sticky w
+
+
+      CenterWindowInScreen .option
+      wm deiconify .option
+      raise .option
+      focus .option
+      grab .option
+   }
+
+
+   proc SetOptionsFromDialog {} {
+      global opt
+      variable default
+
+      set initialviewmode $default(viewmode)
+
+      set default(casesensitive) $opt(casesensitive)
+      set default(regexp)        $opt(regexp)
+
+      set default(wrapmode) [droplist::Get .option.f.wrap]
+      set default(viewmode) [droplist::Get .option.f.mode]
+
+      if {$default(viewmode) != $initialviewmode} {
+         set msg "$default(viewmode) view mode will take effect "
+         append msg "the next time you start tease."
+         tk_messageBox -message $msg
+      }
+
+      SaveSettings
+   }
+
+
+   proc DestroyOptionWindow {args} {
+      if {[llength $args] > 0} {
+         eval $args
+      }
+      destroy .option
+   }
+
+# end
+

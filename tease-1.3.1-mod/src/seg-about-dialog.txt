@@ -1,0 +1,116 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #-------------------------
+  # ABOUT DIALOG
+  #-------------------------
+
+  # to be sourced directly into the teasegui namespace
+
+   proc LaunchAboutWindow {} {
+      if {[winfo exists .about]} {destroy .about}
+
+      toplevel .about
+      wm withdraw .about
+
+      variable var
+      wm title .about "about $var(programname)"
+
+      grid [
+         button .about.browse0         \
+            -fg "#0000cc"             \
+            -text "$var(programsite)" \
+            -command "teasegui::BrowseCommand $var(programsite)"
+      ] -row 0 -column 0 -ipadx 5 -pady 2 -padx 2 -sticky ew
+
+      if {[lsearch [font names] BOLD] == -1} {
+         font create BOLD
+         eval font configure BOLD [font actual [.about.browse0 cget -font]]
+         eval font configure BOLD -weight bold
+      }
+
+      grid [
+         label .about.lab01 -font BOLD \
+            -text "$var(programname) : $var(programdesc)"
+      ] -row 1 -column 0 -padx 5
+
+      grid [
+         label .about.lab03 -text $var(programversion)
+      ] -row 2 -column 0 -padx 3
+
+      grid [
+         label .about.lab04 -text "by\n $var(programauthor)"
+      ] -row 3 -column 0 -padx 5
+
+      grid [
+         label .about.lab05 -text " "
+      ] -row 4 -column 0 -pady 5
+
+      grid [
+         button .about.browse3         \
+            -fg "#0000cc"             \
+            -text "winsend by Pat Thoyts" \
+            -command "teasegui::BrowseCommand http://tclsoap.sourceforge.net/winsend.html"
+      ] -row 6 -column 0 -ipadx 5 -pady 2 -padx 2 -sticky ew
+
+      grid [
+         button .about.browse1         \
+            -fg "#0000cc"             \
+            -text "freeWrap by Dennis LaBelle" \
+            -command "teasegui::BrowseCommand http://freewrap.sourceforge.net"
+      ] -row 7 -column 0 -ipadx 5 -pady 0 -padx 2 -sticky ew
+
+      grid [
+         button .about.browse2         \
+            -fg "#0000cc"             \
+            -text "tkPrint by Iain Findleton" \
+            -command "teasegui::BrowseCommand http://pages.videotron.com/cclients"
+      ] -row 8 -column 0 -ipadx 5 -pady 2 -padx 2 -sticky ew
+
+
+
+      grid [frame .about.bottom -bd 2 -relief ridge] -row 10 -column 0 -sticky ew -padx 2 -pady 2
+
+      pack [
+         button .about.bottom.ok -text OK -width 8 \
+            -command "font delete BOLD; destroy .about"
+      ] -side right
+
+
+      CenterWindowInScreen .about
+      update
+      wm deiconify .about
+      raise .about
+   }
+
+
+
+   proc BrowseCommand {url} {
+     # auto_execok runs associated files (on windows, anyway)
+      regsub -all "&" $url "^&" url
+      eval exec [auto_execok start] [list $url] &
+   }
+
+  #-------------------------
+  # End...
+  #-------------------------
+

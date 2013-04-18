@@ -1,0 +1,1499 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+#---------------------
+# TEASEGUI NAMESPACE
+#---------------------
+
+# segments containing all tease GUI functions
+
+
+namespace eval teasegui {
+
+   proc InitTeaseGUI {mode} {
+
+      global env
+      global rootdir
+
+      variable comment
+      variable default
+      variable files
+      variable recent
+      variable var
+     # variable gui
+
+  # THIS SHOULD BE SETTABLE FROM COMMAND LINE OPT IN MAIN .TCL script
+     # set var(mode)         $mode
+      set var(top)          {}
+      set var(uniq)         0
+      set var(uniq,text)    0
+      set var(files-open)   {}
+      set var(idx-previous) 0
+      set var(activetext)   ""
+      set var(workingdir)   [pwd]
+      set var(settingsfile) [file nativename "$env(HOME)/.tease.settings"]
+      set var(wrapmode)     word
+      set var(cryptkey)     ""
+      set var(comment)      "#"
+      set var(commentmode)  block
+      set var(commentmodes) [list block contour left]
+
+      set var(programname)        "tease"
+      set var(programdesc)        "text editing and scripting environment"
+      set var(programversion)     "version 1.3.1"
+      set var(programsite)        "http://tease.sourceforge.net"
+      set var(programauthor)      "chess hazlett"
+
+      namespace eval :: {
+         set var(wrapmodes)    [list word char none]
+         set var(viewmodes)    [list single separate]
+         set var(commentmodes) [list block contour left]
+      }
+
+      set recent(files)     {}
+      set recent(limit)     10
+
+     # set comment array
+      array set comment {
+         #  {.tcl .tclsh .perl .pl}
+         // {.java .cpp .c .h}
+         -- .ada
+         REM .bat
+         {<!-- -->} {.html .htm .xml}
+         {/* */} ""
+      }
+
+      set default(font)             "-family ProFontWindows -size 8"
+      set default(colorothertext)   1
+      set default(comment)          "#"
+      set default(commentmode)      block
+      set default(wrapmode)         word
+      set default(selectbackground) "#ff9900"
+      set default(selectforeground) "#ffffff"
+      set default(foreground)       "#000000"
+      set default(background)       "#ffffff"
+      set default(heightoutputwin)  100
+      set default(widthlistwin)     160
+      set default(showsearchbar)    0
+      set default(showbuttonbar)    1
+      set default(showoutputwin)    0
+      set default(casesensitive)    0
+      set default(regexp)           0
+      set default(geometry)         550x450+200+150:150:90
+      set default(showbookmarks)    1
+
+     # after we know what default viewmode is, set it for this session...
+     # ...but be ready to have it re-set from CLI.
+      set default(viewmode)         single
+      set var(mode)                 $default(viewmode)
+
+      array set files {}
+
+
+     # source in relevant externals, packages, & namespaces
+      source $rootdir/seg-about-dialog.txt
+      source $rootdir/seg-bookmarks.txt
+      source $rootdir/seg-color-dialog.txt
+      source $rootdir/seg-commands.txt
+      source $rootdir/seg-comments.txt
+      source $rootdir/seg-cut-copy-paste.txt
+      source $rootdir/seg-font-dialog.txt
+      source $rootdir/seg-option-dialog.txt
+      source $rootdir/seg-print.txt
+      source $rootdir/seg-search-panel.txt
+      source $rootdir/seg-settings-file.txt
+      source $rootdir/seg-utilities.txt
+
+      set printDLL "$rootdir/tkprt11.dll"
+      if {[file exists $printDLL]} {
+         load $printDLL tkprint
+         SetPrintRoutines
+      }
+
+
+      namespace eval :: source $rootdir/lib-droplist.tcl
+      if {[file exists $rootdir/lib-crypt.tcl]} {
+         namespace eval :: source $rootdir/lib-crypt.tcl
+      }
+
+      LoadSettings
+      set var(mode) $default(viewmode)
+     # set var(mode)                 separate
+
+      SetOptionDatabase
+
+     # menus for all toplevels.
+      menu .comment -tearoff 0
+      menu .command -tearoff 0
+      menu .marx    -tearoff 0
+   }
+
+   proc SetOptionDatabase {} {
+      variable default
+      option add *Text.Background       $default(background)
+      option add *Text.Foreground       $default(foreground)
+      option add *Text.selectForeground $default(selectforeground)
+      option add *Text.selectBackground $default(selectbackground)
+
+      if {$default(colorothertext)} {
+         option add *Entry.Background   $default(background)
+         option add *Entry.Foreground   $default(foreground)
+         option add *Listbox.Background $default(background)
+         option add *Listbox.Foreground $default(foreground)
+         option add *selectForeground   $default(selectforeground)
+         option add *selectBackground   $default(selectbackground)
+      }
+
+      option add *selectBorderWidth  1
+      option add *Button.BorderWidth 1
+      option add *Entry.BorderWidth  1
+      option add *Text.BorderWidth   1
+   }
+
+
+
+  #---------------------
+  # FILE OPEN/CLOSE/ETC
+  #---------------------
+   proc OpenFile {args} {
+      variable var
+      switch $var(mode) {
+         separate {AddFile new $args}
+         joint --
+         single   {
+            if {[llength $var(top)] > 0} {
+               AddFile [lindex $var(top) 0] $args
+            } else {
+               AddFile new $args
+            }
+         }
+      }
+   }
+
+
+   proc OpenFileDialog {top} {
+      variable var
+      set tmp [
+         tk_getOpenFile -initialdir $var(workingdir)
+      ]
+      if {$tmp == ""} {return}
+      AddFile $top "$tmp"
+   }
+
+
+   proc SeparateModeAddNewWindow {} {
+      global argv0
+      set argvstr ""
+      foreach a [string map {\\ /} $argv0] {append argvstr $a}
+      eval exec $argvstr &
+   }
+
+
+   proc AddBlankFile {w} {
+      global wrapmode
+      variable var
+      variable files
+
+      set oldtxt $var(activetext)
+      set txt [BuildTextWidget $w]
+      set var(activetext) $txt
+
+      set idx [llength $var(files-open)]
+      set files($idx,path) ""
+      set files($idx,dir)  ""
+      set files($idx,name) "< unnamed >"
+      set files($idx,ext)  ""
+      set files($idx,txt)  $txt
+     # set oldtxt $files($prv,txt)
+
+      lappend var(files-open) $files($idx,name)
+
+
+      if {[winfo exists $oldtxt]} {grid forget $oldtxt}
+      grid $txt -row 0 -column 0 -sticky news
+      set var(idx-previous) $idx
+
+      set txt $var(activetext)
+      if {$var(mode) == "single"} {
+         set lb "$w.f.lb"
+         $lb selection clear 0 end
+         $lb selection set $idx
+      }
+      wm title $w $files($idx,name)
+      set wrapmode [$var(activetext) cget -wrap]
+      SetComment $w $files($idx,ext)
+      ResetScrollbars $w $txt
+      Show/HideHSBWrapMode $w
+
+     # raise the flag, see who salutes
+      wm deiconify $w
+      raise $w
+
+      focus $txt
+      ShowCursorPosition $txt $w.c.lab02
+   }
+
+
+   proc SavePrompt {} {
+      set msg "This file has been modified since it was last saved."
+      append msg "\nSave changes before continuing?"
+      set tmp [
+         tk_messageBox -type yesnocancel \
+            -title "Save file?" -message $msg -icon warning
+      ]
+      return $tmp
+   }
+
+
+   proc ExitCommand {} {
+      catch {SaveSettings}
+      exit
+   }
+
+
+   proc CloseFile {w} {
+      variable var
+
+      if {$var(mode) == "single"} {
+         if {[llength $var(files-open)] < 1} {
+            return
+         }
+      }
+
+     # prompt to save if modified
+      if {[$var(activetext) edit modified]} {
+         set tmp [SavePrompt]
+         if {$tmp == "cancel"} {return}
+         if {$tmp == "yes"} {SaveFile $w}
+      }
+
+     # delete list entry and move all array bits down a notch
+      switch $var(mode) {
+         separate {ExitCommand}
+
+         joint {
+            destroy $w
+         }
+
+         single {
+            variable files
+            set idx [GetActiveTextIndex]
+
+            destroy $files($idx,txt)
+
+            set last [expr [llength $var(files-open)] - 1]
+            for {set i $idx} {$i < $last} {incr i} {
+               set next [expr $i + 1]
+               foreach item [list path dir name ext txt] {
+                  set files($i,$item) $files($next,$item)
+               }
+            }
+
+           # clear last array
+            set var(files-open) [lreplace $var(files-open) $idx $idx]
+            if {$idx >= [llength $var(files-open)]} {
+               set idx [expr [llength $var(files-open)] - 1]
+            }
+            SingleModeFileSelectIndex $w $idx
+            array unset files ${last},*
+
+           # in case this was the last file, ensure scrollbars can't throw errors
+            if {[llength $var(files-open)] < 1} {
+               wm title $w ""
+               $w.t.hsb configure -command {}
+               $w.t.vsb configure -command {}
+               return
+            }
+            global wrapmode
+            set wrapmode [$var(activetext) cget -wrap]
+         }
+      }
+   }
+
+
+   proc GetTextIndex {w} {
+      variable files
+      set returnidx 0
+      foreach name [array names files *,txt] {
+         if {$files($name) == $w} {
+            regsub {,txt$} $name "" idx
+            set returnidx $idx
+            break
+         }
+      }
+      return $returnidx
+   }
+
+
+   proc GetActiveTextIndex {} {
+     # need to get "active" idx without curselection.
+      variable var
+      variable files
+
+      set returnidx 0
+      foreach name [array names files *,txt] {
+         if {$files($name) == $var(activetext)} {
+            regsub {,txt$} $name "" idx
+            set returnidx $idx
+            break
+         }
+      }
+      return $returnidx
+   }
+
+
+   proc SaveFileDialog {w} {
+      variable var
+      set tmp [
+         tk_getSaveFile -initialdir $var(workingdir)
+      ]
+      if {$tmp == ""} {return}
+
+      variable files
+      set idx [GetActiveTextIndex]
+      set files($idx,path) "$tmp"
+      set files($idx,dir)  [file dirname $tmp]
+      set files($idx,name) [file tail $tmp]
+      set files($idx,ext)  [file extension $tmp]
+      set var(files-open)  [lreplace $var(files-open) $idx $idx $files($idx,name)]
+
+      SaveFile $w
+   }
+
+
+   proc SaveFile {w} {
+      variable var
+      variable files
+
+      set idx 0
+
+      set idx [GetActiveTextIndex]
+
+      set path $files($idx,path)
+      set txt  $files($idx,txt)
+
+     # if no filename exists, make user get one.
+      if {[regexp {^\s*$} $path]} {
+         SaveFileDialog $w
+         return
+      }
+
+     # check for writable file, if it is not, prompt user to overwrite
+     # ... and remember to close it after we've saved.
+      set overwritten 0
+      if {(([file exists $path]) && (! [file writable $path]))} {
+         set msg "$files($idx,name) is currently read-only.\n\nClick OK to "
+         append msg "try to set it to writable and continue saving."
+
+         set setwritable [
+            tk_messageBox -message $msg -type okcancel -icon warning \
+               -title "WARNING: Read-only file!"
+         ]
+         if {$setwritable == "cancel"} {return}
+
+         global tcl_platform
+         set overwritten 1
+         if {$tcl_platform(platform) == "windows"} {
+            file attributes $path -readonly 0
+         }
+         if {$tcl_platform(platform) == "unix"} {
+            file attributes $path -permissions u+w
+         }
+      }
+
+      set data [GetTextFromWidget $txt]
+
+      set OUT [open "$path" w]
+      fconfigure $OUT -translation binary
+      puts -nonewline $OUT $data
+      close $OUT
+
+      set var(workingdir) $files($idx,dir)
+      $txt edit reset
+      $txt edit modified 0
+      wm title [winfo toplevel $txt] $files($idx,name)
+      AddFileToRecentList $files($idx,path)
+
+     # if we've overwritten, set permissions back to unwritable
+      if {$overwritten} {
+         set msg "$files($idx,name) has been saved.\n\nClick OK to set it "
+         append msg "back to read-only, or cancel to leave it writable."
+
+         set setunwritable [
+            tk_messageBox -message $msg -type okcancel -icon warning \
+               -title "Revert write permissions?"
+         ]
+         if {$setunwritable == "cancel"} {return}
+
+         if {$tcl_platform(platform) == "windows"} {
+            file attributes $path -readonly 1
+         }
+         if {$tcl_platform(platform) == "unix"} {
+            file attributes $path -permissions u-w
+         }
+      }
+   }
+
+
+   proc AddFile {w args} {
+      global wrapmode
+      variable var
+      variable files
+
+     # for new window
+      if {$w == "new"} {
+         set w [BuildSingleWindow]
+      }
+
+     # fugly, but necessary when dealing with spaces in filenames
+      set filename ""
+      foreach a $args {
+         if {$filename != ""} {append filename " "}
+         append filename $a
+      }
+
+     # check for blank file name before adding to list
+      if {(($filename == "{}") || ($filename == ""))} {
+         AddBlankFile $w
+         return $w
+      }
+
+     # check for filepath in array search... if we find it, then we already
+     # have the file open and probably should go there instead... and then,
+     # of course, bail out.
+      foreach key [array names files *,path] {
+         if {$files($key) == $filename} {
+            regsub {,path} $key "" idx
+            SingleModeFileSelectIndex $w $idx
+            return
+         }
+      }
+
+
+     # if filename to be read does not exist anymore,
+     # for instance, if we're reading a recent file in that
+     # has been disappeared, we should bow out gracefully.
+      if {! [file exists $filename]} {
+         tk_messageBox -icon warning \
+            -title "File not found"  \
+            -message "Error reading $filename"
+         return
+      }
+
+     # append filename to list, configure file data
+     #### FUTURE NOTE at some point, we might be inserting into a sorted list
+     #### based on some sort of view setting; if so, we will need to know
+     #### the index the file is inserted to.
+
+      set oldtxt $var(activetext)
+      set txt [BuildTextWidget $w]
+
+      set idx [llength $var(files-open)]
+      set files($idx,path) "$filename"
+      set files($idx,dir)  [file dirname $filename]
+      set files($idx,name) [file tail $filename]
+      set files($idx,ext)  [file extension $filename]
+      set files($idx,txt)  $var(activetext)
+
+     # change title to "loading" for the duration
+      wm title $w "<loading $files($idx,name)>"
+
+      lappend var(files-open) $files($idx,name)
+      if {$var(mode) == "single"} {
+         set lb "$w.f.lb"
+         $lb configure -state disabled
+      }
+
+#OUT $w old: $oldtxt   txt: $txt    idx: $idx
+
+      if {[winfo exists $oldtxt]} {grid forget $oldtxt}
+      grid $txt -row 0 -column 0 -sticky news
+      set var(idx-previous) $idx
+
+    # # binary loading (tclDES) shouldn't use newlines
+    #  set IN [open $filename r]
+    #  fconfigure $IN -translation binary
+    #  set pluralflag 0
+    #  while {! [eof $IN]} {
+    #     if {$pluralflag} {
+    #        $txt insert end "\n"
+    #        append files($idx,text) "\n"
+    #     }
+    #     gets $IN data
+    #     $txt insert end "$data"
+    #     if {$var(mode) == "single"} {
+    #        append files($idx,text) "$data"
+    #     }
+    #     if {! $pluralflag} {set pluralflag 1}
+    #     update
+    #  }
+    #  close $IN
+
+
+    # # binary loading (tclDES) shouldn't use newlines
+    #  set IN [open $filename r]
+    #  fconfigure $IN -translation binary
+    #  set data [read $IN]
+    #  close $IN
+    #  $txt insert end $data
+
+     # load by line and update... it's nicer on big files-- doesn't block
+      set IN [open $filename r]
+      set pluralflag 0
+      while {! [eof $IN]} {
+         if {$pluralflag} {
+            $txt insert end "\n"
+            append files($idx,text) "\n"
+         }
+         gets $IN data
+         $txt insert end "$data"
+         if {$var(mode) == "single"} {
+            append files($idx,text) "$data"
+         }
+         if {! $pluralflag} {set pluralflag 1}
+         update
+      }
+      close $IN
+
+     # and now change title to just file name, no path.
+      wm title $w $files($idx,name)
+      if {$var(mode) == "single"} {
+         $lb configure -state normal
+         $lb selection clear 0 end
+         $lb selection set $idx
+         SingleModeFileSwitch $w.f.lb
+      }
+
+      set var(workingdir) $files($idx,dir)
+      $txt edit modified 0
+      $txt edit reset
+
+      SetComment $w $files($idx,ext)
+      ResetScrollbars $w $txt
+      set wrapmode [$var(activetext) cget -wrap]
+      Show/HideHSBWrapMode $w
+      AddFileToRecentList $files($idx,path)
+
+     # raise the flag, see who salutes
+      wm deiconify $w
+      raise $w
+      focus $w
+
+     # send back $w
+      return $w
+
+     # single mode:
+     # check for filepath in list,
+     # go to that file in list if already there
+     # add entry to file list if not already there,
+     # load file into window
+     # configure "view" aspects of file: comment, path, cwd, etc.
+
+
+     # other modes:
+     # prompt to save file in list [y/n/c] save if requested
+     # clear existing file data
+     # load new file into window
+   }
+
+
+   proc AddFileToRecentList {path} {
+      variable recent
+      set idx [lsearch $recent(files) $path]
+      if {$idx < 0} {
+         lappend recent(files) $path
+         if {[llength $recent(files)] > $recent(limit)} {
+            set recent(files) [lreplace $recent(files) 0 0]
+         }
+      } else {
+         set recent(files) [lreplace $recent(files) $idx $idx]
+         lappend recent(files) $path
+      }
+   }
+
+
+   proc SingleModeFileSelectIndex {w idx} {
+      variable var
+      variable files
+
+      if {[llength $var(files-open)] < 1} {return}
+      set top [winfo toplevel $w]
+
+     # if old text widget still exists, make sure we forget about it
+      set prv $var(idx-previous)
+
+      set oldtxt $files($prv,txt)
+      if {[winfo exists $oldtxt]} {grid forget $oldtxt}
+
+      set txt $files($idx,txt)
+      grid $txt -row 0 -column 0 -sticky news
+      set var(activetext) $txt
+
+      wm title $top "$files($idx,name)"
+      set var(idx-previous) $idx
+
+      if {$var(mode) == "single"} {
+         $top.f.lb selection clear 0 end
+         $top.f.lb selection set $idx
+      }
+
+     # set wrapmode [$var(activetext) cget -wrap]
+      SetComment $top $files($idx,ext)
+      ResetScrollbars $top $txt
+      focus $txt
+      ShowCursorPosition $txt $top.c.lab02
+   }
+
+
+   proc SingleModeFileSwitch {w} {
+      variable var
+      variable files
+      global wrapmode
+
+      if {[llength $var(files-open)] < 1} {return}
+      set idx [$w curselection]
+      set prv $var(idx-previous)
+      set top [winfo toplevel $w]
+
+      if {$idx == $prv} {
+         set var(idx-previous) $idx
+         return
+      }
+      set var(idx-previous) $idx
+
+     # set top [winfo toplevel $w]
+
+      set oldtxt $files($prv,txt)
+      set txt $files($idx,txt)
+#OUT $top oldtxt: $oldtxt   txt: $txt
+      grid $txt -row 0 -column 0 -sticky news
+      if {[winfo exists $oldtxt]} {grid forget $oldtxt}
+      set var(activetext) $txt
+
+      SetComment $top $files($idx,ext)
+      wm title $top "$files($idx,name)"
+     # set var(idx-previous) $idx
+
+      ResetScrollbars $top $txt
+      set wrapmode [$var(activetext) cget -wrap]
+      Show/HideHSBWrapMode $top
+      focus $txt
+      ShowCursorPosition $txt $top.c.lab02
+   }
+
+
+   proc ResetScrollbars {top txt} {
+     # re-configuring scrollbar commands doesn't seem to work, so blow them
+     # away and re-create them.  Ugly, but what can you do?
+      destroy $top.t.vsb
+      destroy $top.t.hsb
+
+      grid [
+         scrollbar $top.t.vsb -command [list $txt yview]
+      ] -row 0 -column 1 -sticky ns
+      grid [
+         scrollbar $top.t.hsb -command [list $txt xview] -orient horizontal
+      ] -row 1 -column 0 -sticky ew
+
+     # now ensure that the scrollbars are set correctly for their files
+      set ycoords [$txt yview]
+      eval $top.t.vsb set $ycoords
+      set xcoords [$txt xview]
+      eval $top.t.hsb set $xcoords
+   }
+
+   proc Show/HideHSBWrapMode {top} {
+      global wrapmode
+      if {$wrapmode == "none"} {
+         grid $top.t.hsb
+      } else {
+         grid remove $top.t.hsb
+      }
+   }
+
+
+   proc GetTextFromWidget {txt} {
+      set str [$txt get 1.0 end]
+      set lchar [string index $str end]
+      if {$lchar == "\n"} {
+         set str [string range $str 0 end-1]
+      }
+      return $str
+   }
+
+
+  #-------------------
+  # GUI BUILDING
+  #-------------------
+   proc BindEnter/LeaveEffects {widget} {
+      bind $widget <Enter> [list %W configure -relief raised]
+      bind $widget <Leave> [list %W configure -relief flat]
+   }
+
+
+   proc BuildSingleWindow {} {
+      variable var
+      variable default
+
+      set uniq [GetUniqueNumber]
+      set w [toplevel .top$uniq]
+
+      wm withdraw $w
+
+      lappend var(top) $w
+
+      BuildMenubar             $w
+      BuildSearchbar           $w
+      BuildButtonbar           $w
+      BuildFileAndTextSections $w
+      BuildOutputArea          $w
+      BuildCursorFrame         $w
+
+     # file list column should not stretch horiz, but should stretch vert
+      grid columnconfigure $w 0 -weight 0
+      grid columnconfigure $w 1 -weight 1
+
+     # only rows that should stretch vert are text area & output window.
+     # 0 = menu bar
+     # 1 = search bar
+     # 2 = buttonbar
+     # 3 = UNUSED possible tab manager
+     # 4 = text/file list (file list spans 2 cols)
+     # 5 = output window
+     # 6 = status bar
+      grid rowconfigure $w 0 -weight 0
+      grid rowconfigure $w 1 -weight 0
+      grid rowconfigure $w 2 -weight 0
+      grid rowconfigure $w 3 -weight 0
+      grid rowconfigure $w 4 -weight 1
+      grid rowconfigure $w 5 -weight 0
+      grid rowconfigure $w 6 -weight 0
+
+      if {$var(mode) != "joint"} {
+         wm protocol $w WM_DELETE_WINDOW teasegui::ExitCommand
+      }
+
+     #
+     # bindings
+     #
+      bind $w <Control-s> [list teasegui::SaveFile $w]
+      bind $w <Control-r> [list teasegui::ExecWindow $w]
+      bind $w <Control-e> [list teasegui::CryptText Encrypt $w]
+      bind $w <Control-d> [list teasegui::CryptText Decrypt $w]
+
+      set geoarray [split $default(geometry) :]
+      wm geometry $w [lindex $geoarray 0]
+      if {$var(mode) == "single"} {
+         $w.f configure -width [lindex $geoarray 1]
+      }
+      $w.o configure -height [lindex $geoarray 2]
+      update
+      wm deiconify $w
+      raise $w
+      return $w
+   }
+
+
+
+   proc BuildMenubar {w} {
+      global wrapmode
+      global show
+      variable var
+      variable default
+
+      grid [
+         frame $w.mb
+      ] -row 0 -column 0 -sticky ew -columnspan 2
+
+     #-----------
+     # FILE MENU
+     #-----------
+      pack [
+         menubutton $w.mb.f -text File -underline 0 -menu $w.mb.f.file -bd 1
+      ] -side left
+
+      menu $w.mb.f.file -tearoff 0
+      $w.mb.f.file add command -label "Open..."      -command [list teasegui::OpenFileDialog $w]
+      $w.mb.f.file add cascade -label "Recent files" -menu $w.mb.f.file.recent
+      $w.mb.f.file add command -label "Save as..."   -command [list teasegui::SaveFileDialog $w]
+      $w.mb.f.file add command -label Save           -command [list teasegui::SaveFile $w]
+      $w.mb.f.file add separator
+
+      if {$var(mode) == "separate"} {
+         $w.mb.f.file add command -label New            -command teasegui::SeparateModeAddNewWindow
+      } else {
+         $w.mb.f.file add command -label New            -command [list teasegui::AddFile $w ""]
+      }
+
+      $w.mb.f.file add command -label "Clear file"   -command [list teasegui::Clear $w]
+      $w.mb.f.file add command -label "Close file"   -command [list teasegui::CloseFile $w]
+      $w.mb.f.file add separator
+      $w.mb.f.file add command -label Print          -command [list teasegui::PrintTextWidget]
+      $w.mb.f.file add separator
+      $w.mb.f.file add command -label Exit           -command teasegui::ExitCommand
+
+      menu $w.mb.f.file.recent \
+         -tearoff 0 \
+         -postcommand [
+            list teasegui::RecentMenuPost $w.mb.f.file.recent $w
+         ]
+
+     #-----------
+     # EDIT MENU
+     #-----------
+      pack [
+         menubutton $w.mb.e -text Edit -underline 0 -menu $w.mb.e.edit -bd 1
+      ] -side left
+      menu $w.mb.e.edit -tearoff 0
+      $w.mb.e.edit add command -label Cut   -command "teasegui::TextCommand cut"   -accelerator "Ctrl x"
+      $w.mb.e.edit add command -label Copy  -command "teasegui::TextCommand copy"  -accelerator "Ctrl c"
+      $w.mb.e.edit add command -label Paste -command "teasegui::TextCommand paste" -accelerator "Ctrl v"
+      $w.mb.e.edit add separator
+      $w.mb.e.edit add command -label Undo -command "teasegui::TextCommand undo" -accelerator "Ctrl z"
+      $w.mb.e.edit add command -label Redo -command "teasegui::TextCommand redo" -accelerator "Ctrl y"
+      $w.mb.e.edit add separator
+      $w.mb.e.edit add command -label Comment -command "teasegui::TextCommand comment"
+      $w.mb.e.edit add command -label Uncomment -command "teasegui::TextCommand uncomment"
+      $w.mb.e.edit add separator
+      $w.mb.e.edit add command -label Uppercase -command "teasegui::TextCommand upper"
+      $w.mb.e.edit add command -label Lowercase -command "teasegui::TextCommand lower"
+      $w.mb.e.edit add separator
+      $w.mb.e.edit add command -label "Select all" -command "teasegui::TextCommand selectall"
+
+
+     #-----------
+     # VIEW MENU
+     #-----------
+      pack [
+         menubutton $w.mb.v -text View -underline 0 -menu $w.mb.v.view -bd 1
+      ] -side left
+      menu $w.mb.v.view -tearoff 0
+      $w.mb.v.view add command -label Fonts... -command [list teasegui::LaunchFontDialog $w]
+      $w.mb.v.view add command -label Colors... -command [list teasegui::LaunchColorDialog $w]
+      $w.mb.v.view add command -label "Options..." -command [list teasegui::LaunchOptionDialog $w]
+      $w.mb.v.view add command -label "Set default geometry" -command [list teasegui::SetDefaultGeometry $w]
+      $w.mb.v.view add separator
+
+     # show GUI options
+      $w.mb.v.view add checkbutton -label "Show search panel"  -variable show($w.s) -command "teasegui::Show/Hide $w.s"
+      $w.mb.v.view add checkbutton -label "Show buttonbar"     -variable show($w.b) -command "teasegui::Show/Hide $w.b"
+      $w.mb.v.view add checkbutton -label "Show output window" -variable show($w.o) -command "teasegui::Show/Hide $w.o"
+
+     # make sure we've got our checkboxes configured according to our defaults
+      set show($w.s) $default(showsearchbar)
+      set show($w.b) $default(showbuttonbar)
+      set show($w.o) $default(showoutputwin)
+
+      $w.mb.v.view add separator
+      $w.mb.v.view add radiobutton -label "Wrap word" \
+         -variable wrapmode -command teasegui::ChangeWrapMode -value word
+      $w.mb.v.view add radiobutton -label "Wrap char" \
+         -variable wrapmode -command teasegui::ChangeWrapMode -value char
+      $w.mb.v.view add radiobutton -label "Wrap none" \
+         -variable wrapmode -command teasegui::ChangeWrapMode -value none
+
+
+     #------------
+     # TOOLS MENU
+     #------------
+      pack [
+         menubutton $w.mb.t -text Tools -underline 0 -menu $w.mb.t.tools -bd 1
+      ] -side left
+      menu $w.mb.t.tools -tearoff 0
+      $w.mb.t.tools add cascade -label "Sort by line" -menu $w.mb.t.tools.sort
+      $w.mb.t.tools add separator
+      $w.mb.t.tools add command -label "Tail-f..." -command [list teasegui::TailDialog $w]
+      $w.mb.t.tools add command -label "Untail-f"  -command [list teasegui::Untail $w]
+      $w.mb.t.tools add separator
+      $w.mb.t.tools add command -label "Run script" -accelerator "Ctrl r" \
+         -command [list teasegui::ExecWindow $w]
+      if {[namespace exists ::freewrap]} {
+         $w.mb.t.tools add separator
+         $w.mb.t.tools add command -label "Show console" -command [list console show]
+         $w.mb.t.tools add command -label "Hide console" -command [list console hide]
+      }
+
+      if {[namespace exists ::crypt]} {
+         $w.mb.t.tools add separator
+         $w.mb.t.tools add command -label "Encrypt..." -command [list teasegui::CryptText Encrypt]
+         $w.mb.t.tools add command -label "Decrypt..." -command [list teasegui::CryptText Decrypt]
+      }
+
+     # tools : sort menu
+      menu $w.mb.t.tools.sort -tearoff 0
+      $w.mb.t.tools.sort add command -label "Increasing" \
+         -command [list teasegui::SortContents -increasing]
+      $w.mb.t.tools.sort add command -label "Decreasing" \
+         -command [list teasegui::SortContents -decreasing]
+      $w.mb.t.tools.sort add separator
+      $w.mb.t.tools.sort add command -label "Unique : Increasing" \
+         -command [list teasegui::SortContents -increasing -unique]
+      $w.mb.t.tools.sort add command -label "Unique : Decreasing" \
+         -command [list teasegui::SortContents -decreasing -unique]
+
+
+     #----------------
+     # BOOKMARKS MENU
+     #----------------
+      pack [
+         menubutton $w.mb.bm -text Bookmarks -underline 0 -bd 1
+      ] -side left
+      bind $w.mb.bm <Button> "teasegui::PostBookmarksMenu %W"
+
+
+     #----------------
+     # COMMANDS MENU
+     #----------------
+      pack [
+         menubutton $w.mb.cmd -text Commands -underline 0 -bd 1
+      ] -side left
+      bind $w.mb.cmd <Button> "teasegui::CommandMenuPost %W"
+
+
+     #-------------------------
+     # COMMENT MENU & SELECTOR
+     #-------------------------
+      pack [
+         menubutton $w.mb.c -text "Comment:"
+      ] -side left
+      bind $w.mb.c <Button> "teasegui::CommentMenuBind %W"
+
+      pack [
+         entry $w.mb.comment -width 7  \
+            -justify left -relief flat -bd 1 \
+            -bg [. cget -bg] -fg [$w.mb.c cget -foreground]
+      ] -side left
+      $w.mb.comment insert 0 $default(comment)
+
+
+     #------------------
+     # HELP/ABOUT MENU
+     #------------------
+      pack [
+         menubutton $w.mb.h -text Help -underline 0 -menu $w.mb.h.help -bd 1
+      ] -side right
+      menu $w.mb.h.help -tearoff 0
+      $w.mb.h.help add command -label "About..." -command [list teasegui::LaunchAboutWindow]
+
+
+      foreach child [winfo children $w.mb] {BindEnter/LeaveEffects $child}
+   }
+
+
+   proc SetDefaultGeometry {top} {
+      variable default
+      variable var
+
+      set g [wm geometry $top]
+      set f [lindex [split $default(geometry) :] 1]
+
+      if {$var(mode) == "single"} {
+         set f [$top.f cget -width]
+      }
+
+      set o [$top.o cget -height]
+      set default(geometry) "${g}:${f}:${o}"
+
+      set default(showsearchbar) 0
+      set default(showbuttonbar) 0
+      set default(showoutputwin) 0
+      if {[winfo ismapped $top.s]} {set default(showsearchbar) 1}
+      if {[winfo ismapped $top.b]} {set default(showbuttonbar) 1}
+      if {[winfo ismapped $top.o]} {set default(showoutputwin) 1}
+
+      SaveSettings
+   }
+
+
+   proc Clear {w} {
+      variable var
+      variable files
+
+      set txt $var(activetext)
+
+     # first make dang sure we're not losing any changes
+      if {[$var(activetext) edit modified]} {
+         set tmp [SavePrompt]
+         if {$tmp == "cancel"} {return}
+         if {$tmp == "yes"} {SaveFile $w}
+      }
+
+      set tmp "< unnamed >"
+      if {$var(mode) == "single"} {
+         variable files
+         set idx [GetActiveTextIndex]
+         set files($idx,path) ""
+         set files($idx,dir)  ""
+         set files($idx,name) "$tmp"
+         set files($idx,ext)  ""
+         set var(files-open) [lreplace $var(files-open) $idx $idx $files($idx,name)]
+      }
+
+      wm title $w $tmp
+
+      $txt delete 1.0 end
+      $txt edit modified 0
+      $txt edit reset
+   }
+
+
+   proc SortContents {{dir -increasing} {uniq ""}} {
+      variable var
+      set w $var(activetext)
+
+      set txt {}
+      if {$uniq == "-unique"} {
+         set txt [lsort $dir $uniq -dictionary [split [GetTextFromWidget $w] \n]]
+      } else {
+         set txt [lsort $dir -dictionary [split [GetTextFromWidget $w] \n]]
+      }
+      $w delete 1.0 end
+      foreach line $txt {
+         $w insert end "$line\n"
+      }
+   }
+
+
+   proc TextCommand {cmd} {
+      variable var
+      set txt $var(activetext)
+      switch $cmd {
+         cut       "tk_textCut   $txt"
+         copy      "tk_textCopy  $txt"
+         paste     "tk_textPaste $txt"
+         undo      {catch {$txt edit undo}}
+         redo      {catch {$txt edit redo}}
+         comment   {teasegui::Comment $txt 1}
+         uncomment {teasegui::Comment $txt 0}
+         upper     {ChangeCase $txt toupper}
+         lower     {ChangeCase $txt tolower}
+         selectall {$txt tag add sel 1.0 end; focus $txt}
+      }
+   }
+
+
+   proc ChangeCase {w direction} {
+     # change case of selection for a text widget... oh, and we
+     # shouldn't use the clipboard.  That ain't ours to muck with.
+      set sel [$w tag ranges sel]
+
+     # change case of selection 
+     # if no selection, bail out
+      if {[llength $sel] < 2} {return}
+
+     # get our target string
+      set idx0 [lindex $sel 0]
+      set idx1 [lindex $sel 1]
+      set str [$w get $idx0 $idx1]
+
+     # now mod it and put it back where we found it, but all shiny and new
+      set str [string $direction $str]
+      $w delete $idx0 $idx1
+      $w insert $idx0 $str sel
+   }
+
+   proc ChangeWrapMode {} {
+      global wrapmode
+      variable var
+      $var(activetext) configure -wrap $wrapmode
+      Show/HideHSBWrapMode [winfo toplevel $var(activetext)]
+   }
+
+
+   proc RecentMenuPost {menu top} {
+      variable recent
+      $menu delete 0 end
+      foreach f [lsort $recent(files)] {
+         $menu add command -label $f -command [list teasegui::AddFile $top $f]
+      }
+   }
+
+
+   proc BuildButtonbar {w} {
+      variable var
+      variable default
+
+     # search frame
+      grid [
+         frame $w.b -bd 2 -relief groove
+      ] -row 2 -column 0 -sticky ew -columnspan 2
+      set blist [list open new save close clear tail-f untail run encrypt decrypt]
+      set clist [list OpenFileDialog AddBlankFile SaveFile CloseFile Clear TailDialog Untail ExecWindow {CryptText Encrypt} {CryptText Decrypt}]
+      set tlist [list open new save close clear tail-f untail run encrypt decrypt]
+      
+      foreach widget $blist command $clist text $tlist {
+         set path ${w}.b.${widget}
+         pack [
+            label $path -bd 1 -text $text -relief flat -width 8
+         ] -side left
+         BindEnter/LeaveEffects $path
+         bind $path <Button-1> [list eval teasegui::$command $w]
+      }
+
+     # "new" is slightly different in separate mode
+      if {$var(mode) == "separate"} {
+         bind ${w}.b.new <Button-1> [list eval teasegui::SeparateModeAddNewWindow]
+      }
+
+      if {! $default(showbuttonbar)} {
+         global show
+         set show($w.b) 0
+         Show/Hide $w.b
+      }
+   }
+
+   proc BuildFileAndTextSections {w} {
+      variable var
+
+     # SINGLE may someday be expanded to single-list and single-tabs.
+     # if that happens, break out "single" case below.
+      switch $var(mode) {
+         separate {BuildTextArea $w}
+         joint {}
+         single   {
+            BuildFileList $w
+           # BuildSlideBarVert $w
+            BuildTextArea $w
+         }
+      }
+      grid propagate $w 0
+   }
+
+
+   proc BuildFileList {w} {
+      variable var
+      variable default
+
+     # filelist frame
+      grid [
+         frame $w.f -bd 0
+      ] -row 4 -column 0 -sticky ns
+
+     # listbox -- FILE LIST!  single mode only.
+      grid [
+         listbox $w.f.lb -listvariable teasegui::var(files-open) -exportselection 0 -bd 1 -relief sunken
+      ] -sticky news
+      bind $w.f.lb <<ListboxSelect>> [list teasegui::SingleModeFileSwitch %W]
+
+      grid [
+         canvas $w.f.vbar -width 0 -bd 1 \
+            -relief raised -height 0 \
+            -cursor sb_h_double_arrow
+      ] -row 0 -column 1 -sticky ns
+
+      bind $w.f.vbar <ButtonPress-1>   [list teasegui::SetMoveMode %W $w.f $w.t 1 1]
+      bind $w.f.vbar <ButtonRelease-1> [list teasegui::SetMoveMode %W $w.f $w.t 0 1]
+
+     # set width according to default
+      grid propagate $w.f 0
+      $w.f configure -width $default(widthlistwin)
+
+     # file list should stretch vertically, not horizontally
+      grid columnconfigure $w.f 0 -weight 1
+      grid rowconfigure    $w.f 0 -weight 1
+   }
+
+
+   proc BuildTextArea {w} {
+      variable var
+ 
+      grid [
+         frame $w.t -bd 1 -relief sunken
+      ] -row 4 -column 1 -sticky news
+      grid [
+         scrollbar $w.t.vsb
+      ] -row 0 -column 1 -sticky ns
+      grid [
+         scrollbar $w.t.hsb -orient horizontal
+      ] -row 1 -column 0 -sticky ew
+
+     # text area should stretch vertically AND horizontally
+      grid columnconfigure $w.t 0 -weight 1
+      grid columnconfigure $w.t 1 -weight 0
+      grid rowconfigure    $w.t 0 -weight 1
+      grid rowconfigure    $w.t 1 -weight 0
+
+     # some misc bindings
+   }
+
+   proc BuildTextWidget {w} {
+      variable var
+      variable default
+
+      set tidx [GetUniqueNumber text]
+
+      eval font create FONT$tidx $default(font)
+
+      set txt [
+         text $w.t.txt$tidx -undo on \
+         -wrap $default(wrapmode) \
+         -font FONT$tidx -bd 0 \
+         -bg $default(background) \
+         -fg $default(foreground) \
+         -selectforeground $default(selectforeground) \
+         -selectbackground $default(selectbackground) \
+         -yscrollcommand [list $w.t.vsb set] \
+         -xscrollcommand [list $w.t.hsb set]
+      ]
+
+     # bindings
+      bind $txt <Control-s> [list teasegui::SaveFile $w]
+      bind $txt <Control-r> [list teasegui::ExecWindow $w]
+      bind $txt <Control-e> [list teasegui::CryptText Encrypt $w]
+      bind $txt <Control-d> [list teasegui::CryptText Decrypt $w]
+
+      set var(activetext) $txt
+
+     # some misc bindings
+      bind $txt <KeyPress>        "after 0 teasegui::ShowCursorPosition %W $w.c.lab02"
+      bind $txt <ButtonPress-1>   "after 0 teasegui::ShowCursorPosition %W $w.c.lab02"
+      bind $txt <ButtonRelease-1> "after 0 teasegui::ShowCursorPosition %W $w.c.lab02"
+      bind $txt <ButtonRelease-2> "after 0 teasegui::ShowCursorPosition %W $w.c.lab02"
+      bind $txt <Button-3>        "teasegui::CCPMenuBind $txt"
+      return $txt
+   }
+
+   proc BuildOutputArea {w} {
+      variable var
+      variable default
+
+     # output frame
+      grid [
+         frame $w.o -bd 0 -relief ridge
+      ] -row 5 -column 0 -sticky news -columnspan 2
+
+      grid [
+         canvas $w.o.hbar -width 0 -bd 1 \
+            -relief raised -height 0 \
+            -cursor sb_v_double_arrow
+      ] -row 0 -column 0 -columnspan 2 -sticky ew
+
+      bind $w.o.hbar <ButtonPress-1>   [list teasegui::SetMoveMode %W $w.t $w.o 1 0]
+      bind $w.o.hbar <ButtonRelease-1> [list teasegui::SetMoveMode %W $w.t $w.o 0 0]
+
+
+     # output text area and button bar.  One output area to our many
+     # text widgets... at least in single mode.
+      grid [
+         frame $w.o.bar -bd 2 -relief groove
+      ] -row 1 -column 0 -columnspan 2 -sticky ew
+
+
+     #
+     # output text control button bar
+     #
+      label $w.o.bar.clear -width 10 -bd 1 -text clear
+      bind $w.o.bar.clear <Button-1> [list $w.o.txt delete 1.0 end]
+
+      label $w.o.bar.copy  -width 12 -bd 1 -text "copy to new"
+      bind $w.o.bar.copy <Button-1> [list teasegui::CopyOutputToNew $w.o.txt $w]
+
+      label $w.o.bar.kill  -width 12 -bd 1 -text "kill channel"
+      bind $w.o.bar.kill <Button-1> [list teasegui::ExecWindowKillChannel $w.o.txt]
+
+      label $w.o.bar.scron -width 12 -bd 1 -text "scroll on"
+      bind $w.o.bar.scron <Button-1> [list teasegui::SetScrollState $w.o.txt normal]
+
+      label $w.o.bar.scroff -width 12 -bd 1 -text "scroll off"
+      bind $w.o.bar.scroff <Button-1> [list teasegui::SetScrollState $w.o.txt disabled]
+
+     # ...and bind our enter/leave effects
+      foreach b [list clear copy kill scron scroff] {
+         pack $w.o.bar.$b -side left
+         BindEnter/LeaveEffects $w.o.bar.$b
+      }
+
+
+     #
+     # output text widget
+     #
+      grid [
+         text $w.o.txt -height 4 -bd 1 -relief sunken \
+         -yscrollcommand [list $w.o.vsb set]
+      ] -row 2 -column 0 -sticky news
+
+      grid [
+         scrollbar $w.o.vsb -command [list $w.o.txt yview]
+      ] -row 2 -column 1 -sticky ns
+
+     # text area should stretch vertically AND horizontally
+      grid columnconfigure $w.o 0 -weight 1
+      grid rowconfigure    $w.o 2 -weight 1
+
+     # set height according to default
+      grid propagate $w.o 0
+      $w.o configure -height $default(heightoutputwin)
+
+      bind $w.o.txt <Button-3> [list teasegui::CCPMenuBind $w.o.txt]
+
+     # set scrolling, etc states now, AFTER the output text widget is created.
+      SetOutputRunState $w.o.txt normal
+      SetScrollState $w.o.txt normal
+
+
+      if {! $default(showoutputwin)} {
+         global show
+         set show($w.o) 0
+         Show/Hide $w.o
+      }
+   }
+
+
+   proc CopyOutputToNew {out top} {
+      variable var
+      AddFile $top
+      set txt $var(activetext)
+      set data [GetTextFromWidget $out]
+      $txt insert end $data
+   }
+
+
+   proc Show/Hide {w} {
+      global show
+      if {$show($w)} {
+         grid $w
+      } else {
+         grid remove $w
+      }
+      update
+   }
+
+
+   proc BuildCursorFrame {w} {
+      variable var
+
+     # cursor frame
+      grid [
+         frame $w.c -bd 2 -relief sunken
+      ] -row 6 -column 0 -columnspan 2 -sticky ew
+      grid [
+         label $w.c.lab01 -text cursor:
+      ] -row 0 -column 0 -sticky e
+      grid [
+         label $w.c.lab02
+      ] -row 0 -column 1 -sticky w
+
+
+     # configure grid weights
+      grid columnconfigure $w.c 0 -weight 0
+      grid columnconfigure $w.c 1 -weight 0
+      grid columnconfigure $w.c 2 -weight 1
+      grid rowconfigure    $w.c 0 -weight 0
+   }
+
+
+  #-------------------
+  # MOVE BAR ROUTINES
+  #-------------------
+   proc SetMoveMode {w w01 w02 on {horiz 0}} {
+      global move
+     # w = calling widget
+      set move(01) $w01
+      set move(02) $w02
+   
+      set move(attribute)  height
+      set move(coordinate) y
+   
+      if {$horiz} {
+         set move(attribute)  width
+         set move(coordinate) x
+      }
+   
+      if {$on} {
+        # once we move, we probably want grid propagation OFF.
+        # kind of defeats the purpose otherwise.
+         grid propagate $w01 0
+         grid propagate $w02 0
+   
+         $w configure -bg [$w cget -selectbackground]
+         set move(pointorig) [winfo pointer$move(coordinate) .]
+         set move(1orig) [winfo $move(attribute) $move(01)]
+         set move(2orig) [winfo $move(attribute) $move(02)]
+         bind $w <Motion> "teasegui::MoveWindows"
+      } else {
+         $w configure -bg [. cget -bg]
+         bind $w <Motion> {}
+      }
+   }
+   
+   
+   proc MoveWindows {} {
+      global move
+      set newpointer [winfo pointer$move(coordinate) .]
+      if {$newpointer < 2} {return}
+      set change [expr $newpointer - $move(pointorig)]
+      set new01dimension [expr $move(1orig) + $change]
+      set new02dimension [expr $move(2orig) - $change]
+   
+      $move(01) configure -$move(attribute) $new01dimension
+      $move(02) configure -$move(attribute) $new02dimension
+   }
+
+   proc ShowCursorPosition {src tgt} {
+      $tgt configure -text [$src index insert]
+   }
+
+
+   proc GetUniqueNumber {args} {
+      variable var
+      set key uniq
+      if {"$args" != ""} {set key "uniq,$args"}
+      incr var($key)
+      return $var($key)
+   }
+
+
+   proc TeaseServerAlreadyRunning {args} {
+     # query for existing tease instances... if one exists and is older than
+     # current, then send it the message and bail out.  If we don't exit
+     # here, then we know this is the main server and we can add the file
+     # to this GUI.
+      global tcl_platform
+      variable var
+
+      set serverexists    0
+      if {$tcl_platform(platform) == "windows"} {
+         load winsend10.dll
+
+        # do something windowy
+         set var(invoked)    [clock seconds]
+         set var(interpname) tease131
+
+         set interps [winsend interps]
+
+         foreach interp $interps {
+            if {[regexp {^tease131} $interp]} {
+               set serverexists 1
+               break
+            }
+         }
+         if {! $serverexists} {
+             winsend appname $var(interpname)
+         }
+      }
+      return $serverexists
+   }
+}
+
+# end
+
+

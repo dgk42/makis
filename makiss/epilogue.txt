@@ -1,0 +1,14 @@
+
+# begin epilogue.txt
+thisenv = auxbuild.do_build_proj(outenv, proj, params)
+subprj = auxfun.list_from_str_dict(params, 'sub_proj')
+if subprj:
+	Export({"outenv." + proj : thisenv})
+	for i in subprj:
+		x = i.split("%")
+		if len(x) > 1:
+			SConscript(['%s/SConscript' % x[0]],
+				variant_dir = x[0], src_dir = x[1], duplicate = 0)
+		else:
+			SConscript(['%s/SConscript' % x[0]])
+# end epilogue.txt

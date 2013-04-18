@@ -1,0 +1,98 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #-------------------------
+  # SETTINGS FILE LOAD/SAVE
+  #-------------------------
+
+  # to be sourced directly into the teasegui namespace
+
+   proc SaveSettings {} {
+      variable command
+      variable comment
+      variable default
+      variable marx
+      variable recent
+      variable var
+
+     # open write channel to settings file
+      set OUT [open $var(settingsfile) w]
+
+     # write all default values
+      set hashlist [list default recent comment command marx]
+
+      foreach hash $hashlist {
+         foreach key [lsort [array names $hash]] {
+            puts $OUT "${hash}:${key}"
+            eval set hashstrval "$[set hash]($key)"
+            set hashlistval [split $hashstrval \n]
+            foreach line $hashlistval {
+               puts $OUT "   $line"
+            }
+            if {[llength $hashlistval] < 1} {puts $OUT "   "}
+         }
+      }
+      close $OUT
+   }
+
+
+   proc LoadSettings {} {
+      variable command
+      variable comment
+      variable default
+      variable marx
+      variable recent
+      variable var
+
+     # if it ain't there, dont bother
+      if {! [file exists $var(settingsfile)]} {return}
+
+     # read settings file into data variable
+      set IN [open $var(settingsfile) r]
+      set data [read $IN]
+      close $IN
+
+     # loop thru data file contents and set to associative array.
+     # lines beginning with no spaces are array KEYS, lines starting
+     # with 3 spaces are VALUES.
+      foreach line [split $data \n] {
+         if {[regexp {^\S+} $line]} {
+            set key $line
+            set tmp($key) ""
+         } else {
+            regsub {^   } $line "" str
+            if {$tmp($key) == ""} {
+               set tmp($key) "$str"
+            } elseif {! [regexp {^\s*$} $line]} {
+               append tmp($key) "\n$str"
+            }
+         }
+      }
+
+      foreach name [array names tmp] {
+         set hash [lindex [split $name :] 0]
+         set key  [lindex [split $name :] 1]
+         array set $hash [list $key $tmp($name)]
+      }
+   }
+
+# end

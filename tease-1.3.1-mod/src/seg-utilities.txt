@@ -1,0 +1,397 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #-------------------
+  # UTILITIES & TOOLS
+  #-------------------
+
+  # to be sourced directly into the teasegui namespace
+
+   #---------------------------------------
+   # Crypt/decrypt procs
+   #---------------------------------------
+   proc CryptText {encdec args} {
+      global opt
+      variable var
+
+      set txt $var(activetext)
+
+      if {[LaunchCryptKeyDialog [winfo toplevel $txt]]} {
+         set data [GetTextFromWidget $txt]
+         crypt::SetKey $opt(cryptkey)
+         set newdata [crypt::$encdec $data]
+         $txt delete 1.0 end
+         $txt insert end $newdata
+      }
+
+      if {$opt(cryptkeysave)} {
+         set var(cryptkey) $opt(cryptkey)
+      } else {
+         set var(cryptkey) ""
+         set opt(cryptkey) ""
+      }
+   }
+
+   proc LaunchCryptKeyDialog {window} {
+      global opt
+      variable var
+
+      if {[winfo exists .key]} {destroy .key}
+
+      toplevel .key
+      wm withdraw .key
+      wm transient .key $window
+
+      grid [
+         frame .key.e
+      ] -row 0 -column 0 -columnspan 2 -padx 15 -pady 10
+      pack [label .key.e.lab01 -text "Encryption key:"] -side left
+      pack [
+         entry .key.e.e -textvariable opt(cryptkey) -show %
+      ] -side left
+
+      grid [
+         frame .key.r
+      ] -row 1 -column 0 -columnspan 2 -padx 5 -pady 5
+      pack [
+         checkbutton .key.r.remember    \
+            -variable opt(cryptkeysave) \
+            -text "Remember key (for this session)"
+      ] -side left
+
+
+      grid [
+         frame .key.b -bd 2 -relief ridge
+      ] -row 2 -column 0 -columnspan 2 -sticky ew -padx 2 -pady 2
+
+      pack [
+         button .key.b.cancel \
+            -width 8          \
+            -text Cancel      \
+            -command [list destroy .key]
+      ] -side right
+
+      pack [
+         button .key.b.ok \
+            -width 8      \
+            -text OK      \
+            -command "set opt(tmpresponse) 1; destroy .key"
+      ] -side right
+
+      bind .key.e.e <Key-Return> "set opt(tmpresponse) 1; destroy .key"
+      bind .key.e.e <Key-Escape> [list destroy .key]
+
+      set opt(tmpresponse) 0
+
+     # bring window up as transient and grab it.  Don't know if grab is the best
+     # of ideas, but use it for now.
+      focus .key.e.e
+      CenterWindowInScreen .key
+      wm deiconify .key
+      raise .key
+      update
+      grab .key
+
+      tkwait window .key
+
+      return $opt(tmpresponse)
+   }
+
+
+   #---------------------------------------
+   # Exec script procs
+   #---------------------------------------
+
+
+   proc ExecWindow {w} {
+      global tcl_platform
+      variable var
+      variable files
+      variable run
+
+      set idx 0
+      set idx [GetActiveTextIndex]
+
+      set out  $w.o.txt
+      set dir  $files($idx,dir)
+      set txt  $files($idx,txt)
+      set name $files($idx,name)
+
+      set pwd [pwd]
+      cd $dir
+      set run(tmpfile,$out) ".tease.tmp.file.$name"
+
+      if {[regexp {^\s*$} $name]} {
+         tk_messageBox \
+            -icon warning \
+            -title "Problem running script" \
+            -message "Can't yet run a script on windows without saving to file.  Save first, then run it."
+         return
+      }
+
+      set run(batfile,$out) "$run(tmpfile,$out).bat"
+      set script [GetTextFromWidget $txt]
+      if {[regexp {^\s*$} $script]} {
+         tk_messageBox \
+            -icon warning \
+            -title "Problem running script" \
+            -message "Can't run a blank script.  Type or load your script into the text window, then run it."
+         return
+      }
+
+      set OUT [open $run(tmpfile,$out) w]
+      puts $OUT $script
+      close $OUT
+
+      set BAT [open $run(batfile,$out) w]
+      puts $BAT "$run(tmpfile,$out) 2>&1"
+      close $BAT
+
+
+     # assemble command & handle platform-specifics here...
+     # unix can just use the filename
+      set cmd $run(batfile,$out)
+
+      if {$tcl_platform(platform) == "unix"} {
+         file attributes $run(tmpfile,$out) -permissions u+wx
+         file attributes $run(batfile,$out) -permissions u+wx
+      }
+
+      set top [winfo toplevel $txt]
+
+     # set scrollstate before any fileevent occurs
+      SetScrollState $w.o.txt normal
+
+      set run(exec,$out) [open "|$cmd" r+]
+      fconfigure $run(exec,$out) -blocking false -buffering line
+      fileevent $run(exec,$out) readable "teasegui::ExecWindowHandleChannel $run(exec,$out) $out"
+      cd $pwd
+
+     # make sure our output window is showing
+      global show
+      set show($top.o) 1
+      Show/Hide $top.o
+
+      SetOutputRunState $out disabled
+   }
+
+
+   proc SetScrollState {out state} {
+      variable var
+      set top [winfo toplevel $out]
+
+      set on  $top.o.bar.scron
+      set off $top.o.bar.scroff
+      set f   ${top}.mb.f
+
+      set oppositestate {disabled}
+      if {$state == $oppositestate} {set oppositestate normal}
+      
+      if {$state == "disabled"} {
+         $off configure -fg [$f cget -disabledforeground]
+         $on  configure -fg [$f cget -foreground]
+         set var(scroll,$out) 0
+      } else {
+         $off configure -fg [$f cget -foreground]
+         $on  configure -fg [$f cget -disabledforeground]
+         set var(scroll,$out) 1
+      }
+   }
+
+
+   proc SetOutputRunState {out state} {
+      variable run
+      set top [winfo toplevel $out]
+
+     # need an opposite for "kill" button
+      set oppositestate {disabled}
+      if {$state == $oppositestate} {set oppositestate normal}
+
+     # list of widgets to disable: run menu items, search all button, run script buttonbar.
+      ${top}.s.searchall configure -state $state
+      ${top}.mb.t.tools entryconfigure 5 -state $state
+
+     # handle bindings on the run label button in the buttonbar
+      set k ${top}.o.bar.kill
+      set b ${top}.b.run
+      set f ${top}.mb.f
+
+      if {$state == "disabled"} {
+         set run(bind,$out) [bind $b <Button-1>]
+         bind $b <Button-1> ""
+         $b configure -fg [$f cget -disabledforeground]
+
+         if {[llength [array names run bind,$k]] < 1} {set run(bind,$k) [bind $k <Button-1>]}
+         bind $k <Button-1> $run(bind,$k)
+         set run(bind,$k) ""
+         $k configure -fg [$f cget -foreground]
+
+      } else {
+         if {[llength [array names run bind,$out]] < 1} {set run(bind,$out) [bind $b <Button-1>]}
+         bind $b <Button-1> $run(bind,$out)
+         set run(bind,$out) ""
+         $b configure -fg [$f cget -foreground]
+
+         set run(bind,$k) [bind $k <Button-1>]
+         bind $k <Button-1> ""
+         $k configure -fg [$f cget -disabledforeground]
+      }
+   }
+
+
+   proc ExecWindowHandleChannel {chan out} {
+      # handle EOF before printing output
+      if {[ eof $chan ]} {
+         global run
+         fileevent $chan readable ""
+         catch {close $chan}
+         catch {file delete $run(tmpfile,$out) $run(batfile,$out)}
+         SetOutputRunState $out normal
+         return
+      }
+
+      # read data from fileevent
+      set data [read $chan]
+      $out insert end "$data"
+
+      variable var
+      if {$var(scroll,$out)} {$out yview end}
+      update
+   }
+
+   proc ExecWindowKillChannel {out} {
+      variable run
+      fileevent $run(exec,$out) readable ""
+      catch {close $run(exec,$out)}
+      catch {file delete $run(tmpfile,$out) $run(batfile,$out)}
+      SetOutputRunState $out normal
+   }
+
+
+   #---------------------------------------
+   # Tail -f procs
+   #---------------------------------------
+   proc TailDialog {w} {
+      variable var
+
+
+#      if {[$txt edit modified]} {
+#         set tmp [SavePrompt]
+#         if {$tmp == "cancel"} {return}
+#         if {$tmp == "yes"} {SaveFile $w}
+#      }
+
+      set tmp [
+         tk_getOpenFile -initialdir $var(workingdir)
+      ]
+
+      if {$tmp == ""} {return}
+
+      AddBlankFile $w
+      set txt $var(activetext)
+
+     # delete widget contents if we're serious
+      $txt delete 1.0 end
+      eval teasegui::Tail-f $txt $tmp
+   }
+
+
+   proc Tail-f {w filename} {
+      variable files
+      variable var
+
+     # set title of toplevel
+      set top [winfo toplevel $w]
+
+      set shortname [file tail $filename]
+      wm title $top "<tail-f> [file tail $shortname]"
+
+      set idx [expr [llength $var(files-open)] - 1]
+      set files($idx,path) $filename
+      set files($idx,dir)  [file dirname $filename]
+      set files($idx,name) "< tail-f $shortname >"
+      set files($idx,ext)  [file extension $filename]
+      set files($idx,txt)  $var(activetext)
+      set var(files-open) [lreplace $var(files-open) $idx $idx $files($idx,name)]
+
+     # open channel, configure, and read what's there so far
+      set files($idx,tail-f) [open $filename]
+      fconfigure $files($idx,tail-f) -blocking 0
+      $w insert end [read $files($idx,tail-f)]
+
+     # set seek point, and start aftering routine
+      seek $files($idx,tail-f) 0 end
+      teasegui::TailReadMore $w $filename $files($idx,tail-f)
+   }
+
+
+   proc TailReadMore {txt {filename ""} {channel ""} {fsize0 -1}} {
+
+      set fsize1 [file size $filename]
+      if {($fsize0 >= 0) && ($fsize0 > $fsize1)} {
+         seek $channel 0 start
+         $txt delete 1.0 end
+      }
+
+      set new ""
+      catch {set new [read $channel]} err
+
+      if {$err == "can not find channel named \"$channel\""} {
+         
+         return
+      }
+
+      if [string length $new] {
+         $txt insert end $new
+         $txt see end
+         update
+      }
+      after 200 [list teasegui::TailReadMore $txt $filename $channel $fsize1]
+   }
+
+
+   proc Untail {w} {
+      variable files
+      variable var
+
+     # if {$var(mode) != "single"} {return}
+     # set idx [$w.f.lb curselection]
+       set idx [GetActiveTextIndex]
+
+      close $files($idx,tail-f)
+     # set files($idx,tail-f) "CLOSED"
+
+      set tmp "< unnamed >"
+      set top [winfo toplevel $w]
+      wm title $top $tmp
+      set files($idx,path) ""
+      set files($idx,dir)  ""
+      set files($idx,name) $tmp
+      set files($idx,ext)  ""
+      set var(files-open) [lreplace $var(files-open) $idx $idx $files($idx,name)]
+   }
+
+   #
+   # End of Tail -f procs
+   #
+
+# end

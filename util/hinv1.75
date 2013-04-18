@@ -1,0 +1,245 @@
+######################################################
+# V.1.75 SS810@brownnut.com
+# hardware inventory and detect script
+#
+# added the lspci command to the script for better
+# card reporting and added fall-back to proc if old
+#
+# feel free to use, any changes please send to me 
+# to include in another version
+# GNU GENERAL PUBLIC LICENSE
+# tested on RedHat, SuSE and Debian so far.
+#######################################################
+verbose=
+
+# show usage
+usage() {
+    echo "usage: `basename $0` [-h]"
+    echo "       `basename $0` [-c|--clear][-v|--verbose][-h|--help]"
+    echo "        -c | clear's screen before displaying"
+    echo "        -v | verbose output"
+    exit 0
+}
+
+# parse options
+while [ $# -gt 0 ] ; do {
+    [ ${1} = "-v" ] || [ ${1} = "--verbose" ] && {
+        verbose=y; shift; continue
+    }
+    [ ${1} = "-c" ] || [ ${1} = "--clear" ] && {
+        clear; shift; continue
+    }  
+    usage
+} done
+
+[ $# -gt 0 ] && usage
+###################
+# CPU Section
+###################
+case `uname -m` in
+alpha)  proc=`grep "^cpus" /proc/cpuinfo | cut -d: -f2`
+        proc=`expr $proc + 1`
+        echo "Total Processors: $proc"
+        egrep -i "cpu (model|revision)|cycle" /proc/cpuinfo
+        ;;
+*)      count=`egrep -c ^processor /proc/cpuinfo`
+        type=`egrep "model name" /proc/cpuinfo | cut -d: -f2 | uniq`
+        speed=`egrep "cpu MHz" /proc/cpuinfo | cut -d: -f2 | cut -d. -f1 | uniq`
+        cach=`egrep "cache size" /proc/cpuinfo | cut -d: -f2 | uniq`
+#
+        echo "Total CPU's: $count"
+        echo "$type $speed MHZ " | awk '{print""$0;}'
+        echo "Cache Size: $cach" | awk '{print" "$0;}'
+
+#       echo "Total CPU's: $count" 
+#       echo "$type $speed "
+#       echo "Cache Size: $cach"
+        ;;
+esac
+###################
+# Mem Section
+###################
+mem=`ls -l /proc/kcore | awk '{print int($5 / 1024 / 1024)}'`
+echo "Main Memory Size: $mem MB" 
+
+echo
+##################
+# IDE HD Section
+##################
+do_hdr=y
+for host in 0 1 ; do {
+    for chan in a b c d ; do {
+        [ -r /proc/ide/ide${host}/hd${chan}/model ] && {
+            [ ${do_hdr} ] && {
+                echo; do_hdr=
+            }
+            echo "Host: ide${host} Channel: hd${chan}"
+            read vendor model </proc/ide/ide${host}/hd${chan}/model
+            printf "Vendor:%8s Model: %s\n" ${vendor} "${model}"
+        }    
+    } done
+} done
+echo
+##################
+# SCSI HD Section
+##################
+if [ -r /proc/scsi/scsi ]; then
+        egrep -A 1 Host /proc/scsi/scsi | sed -e 's/^[ ]*//'
+fi
+################
+# PS/2 Section
+################
+if [ "`egrep "PS/2 Mouse" /proc/interrupts | awk '{print $4 " " $5 }'`" = "PS/2 Mouse" ]; then
+echo "PS/2 Mouse Detected"
+fi
+#############
+# KB Section
+#############
+echo 
+echo "Keyboard Detected:" `egrep -c keyboard /proc/ioports`
+######################
+# Serial Port Section
+######################
+[ ${verbose} ] && [ `grep -c serial /proc/ioports` -gt 0 ] && echo
+echo "Serial Ports:" `egrep -c serial /proc/ioports`
+[ ${verbose} ] && [ -f /proc/tty/driver/serial ] && {
+    grep -v unknown /proc/tty/driver/serial \
+        | grep uart | sed 's/^/ttyS/'
+}
+#################
+# PCMICA Section
+#################
+if [ -x /sbin/cardctl ]; then
+        echo "PCMCIA:"
+        /sbin/cardctl ident | awk '{ print "  "$0; }'
+fi
+#########################
+# show parallel hardware
+#########################
+# show parallel hardware
+list_parport() {
+    base=
+    irq=
+    dma=
+    modes=
+    dev=${1}
+    while read type data ; do {
+        [ ${type} = "base:" ] && {
+            base="${data}"; continue
+        }
+        [ ${type} = "irq:" ] && {
+            irq="${data}"; continue
+        }
+        [ ${type} = "dma:" ] && {
+            dma="${data}"; continue
+        }
+        [ ${type} = "modes:" ] && {
+            modes="${data}"; continue
+        }
+    } done
+    echo ${dev}: io=${base} irq=${irq} dma=${dma} modes=${modes}
+}
+
+npar=0
+[ -d /proc/parport ] && {
+    for d in /proc/parport/[0-9]* ; do {
+        [ -d ${d} ] && npar=`expr ${npar} + 1`
+    } done
+}
+[ ${npar} -gt 0 ] && [ ${verbose} ] && echo
+
+echo Parallel Ports: ${npar}
+[ -d /proc/parport ] && [ ${verbose} ] && {
+    for d in /proc/parport/[0-9]* ; do {
+        [ -d ${d} ] || continue
+        port=`basename ${d}`
+        device=`cat ${d}/devices`
+        list_parport ${device:-parport}${port} < ${d}/hardware
+        [ -f ${d}/autoprobe ] && [ `wc -l < ${d}/autoprobe` -gt 0 ] && {
+            cat ${d}/autoprobe | sed 's/^/  /'
+        }
+    } done
+}
+##########################
+# Network Interface area
+##########################
+/sbin/ifconfig | egrep -q "^eth[0-9]+[^:]" && {
+    [ ${verbose} ] && echo
+echo "Ethernet Controllers:" `/sbin/ifconfig |\
+        awk '/^eth[0-9]+[^:]/ {print $1}'`
+    [ ${verbose} ] && /sbin/ifconfig | egrep "^eth[0-9]+[^:]"
+} 
+
+/sbin/ifconfig | egrep -q "^fddi[0-9]+[^:]" && {
+    [ ${verbose} ] && echo
+echo "FDDI Controllers:" `/sbin/ifconfig |\
+        awk '/^fddi[0-9]+[^:]/ {print $1}'`
+        [ ${verbose} ] && /sbin/ifconfig | egrep "^fddi[0-9]+[^:]"
+}
+###############################################################
+# remove the '| uniq' if you want the script faster
+# in the next section. If you have OLD hardware you may need it
+# otherwise remove them
+###############################################################
+echo
+if [ -x /sbin/lspci ]; then
+	/sbin/lspci | awk '{print $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12}'
+elif [ -r /proc/pci ]; then
+	egrep -i 'interface|controller|bridge' /proc/pci  | sed 's/^ *//' | uniq
+else 
+	echo "PCI Detect: not found"
+fi
+####################
+# show USB devices
+####################
+print_usb() {
+    echo USB Device: ${devno} Driver: ${driver}
+    echo "  "${product:-"[unknown]"}
+    [ ${verbose} ] && {
+        [ "${manufacturer}" ] && echo "  ${manufacturer}"
+        [ "${vendor}" ] && echo "  ${vendor}"
+    }
+}
+
+list_usb_devs() {
+    cdev=0
+    pending=
+    while read type data ; do {
+        [ ${type} = "T:" ] && {
+            cdev=`expr $cdev + 1`
+            [ ${pending} ] && print_usb
+            manufacturer=
+            product=
+            vendor=
+            driver=
+            devno=`echo ${data} | sed -e 's/^.*Dev#=[^0-9]*//' -e 's/ .*$//'`
+            pending=y
+            continue
+        }
+        [ ${type} = "I:" ] && {
+            driver=${data#*Driver=}
+            continue
+        }
+        [ ${type} = "S:" ] && {
+            echo ${data} | grep -q ^Product && {
+                product=${data#Product=}
+            }
+            echo ${data} | grep -q ^Manufacturer && {
+                manufacturer=${data#Manufacturer=}
+            }
+            continue
+        }
+        [ ${type} = "P:" ] && {
+            echo ${data} | grep -q ^Vendor && {
+                vendor=${data}
+            }
+            continue
+        }
+    } done
+    [ ${pending} ] && print_usb
+}
+
+[ -d /proc/bus/usb ] && [ -f /proc/bus/usb/devices ] && {
+    echo 
+    list_usb_devs < /proc/bus/usb/devices
+}

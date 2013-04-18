@@ -1,0 +1,29 @@
+# begin cons.txt
+Help("""
+Type: 'scons vconfig=release' to build the production program,
+      'scons vconfig=debug' to build the debug version,
+      'scons vconfig=profile' to build the profiling version,
+      'scons vconfig=coverage' to build the code coverage version,
+      'scons install' to install binaries,
+      'scons uninstall' to remove binaries.
+      More options:
+      'vtargetplat=l32' for linux 32-bit build target (default: linux 64-bit),
+      'vtargetplat=mac32' for mac os x 32-bit build target,
+      'vtargetplat=mac64' for mac os x 64-bit build target,
+      'vtargetplat=w32' for m$ windows 32-bit build target,
+      'vtargetplat=w64' for m$ windows 64-bit build target,
+      'vllvmgcc=1', to use llvm-gcc on linux (default: gcc)
+      'vw32vc98=1' to use m$ vc98 compiler on m$ windows (default: mingw),
+      'projconf=1' to check project configuration,
+      'colour=1' for colour console output (where available),
+      'colour=2' for verbose colour console output (uses colorgcc),
+      '-c' to perform a distclean,
+      '-Q' for quiet output.
+""")
+
+
+from _makis import *
+
+env = auxsetup.setconf(ARGUMENTS)
+# end cons.txt
+

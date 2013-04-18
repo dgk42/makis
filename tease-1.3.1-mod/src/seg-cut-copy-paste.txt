@@ -1,0 +1,116 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #---------------------
+  # CUT-COPY-PASTE MENU
+  #---------------------
+
+  #
+  # to be sourced directly into the teasegui namespace
+  #
+
+
+  # first, create menu as toplevel
+   menu .ccp     -tearoff 0
+
+   proc CCPMenuBind {txt} {
+      .ccp delete 0 end
+      set class [string tolower [winfo class $txt]]
+
+     # entry bindings need the package name...
+      if {$class == "entry"} {
+         .ccp add command -label "copy" -command "teasegui::tk_${class}Copy  $txt"
+         .ccp add command -label cut    -command "teasegui::tk_${class}Cut   $txt"
+         .ccp add command -label paste  -command "teasegui::tk_${class}Paste $txt"
+      }
+     # ...while text widgets don't
+      if {$class == "text"} {
+         .ccp add command -label "copy" -command "tk_${class}Copy  $txt"
+         .ccp add command -label cut    -command "tk_${class}Cut   $txt"
+         .ccp add command -label paste  -command "tk_${class}Paste $txt"
+         .ccp add separator
+         .ccp add command -label comment   -command "teasegui::Comment $txt 1"
+         .ccp add command -label uncomment -command "teasegui::Comment $txt 0"
+         .ccp add separator
+         .ccp add command -label "Select all" -command "$txt tag add sel 1.0 end; focus $txt"
+      }
+      .ccp post [winfo pointerx .] [winfo pointery .]
+   }
+
+
+   # nonstandard tk edit functions mostly courtesy of Manfred Stelzhammer
+   # http://dbforums.com/arch/136/2002/11/435504 --Nov 29 2002 17:41-- 
+   proc tk_listboxCopy {w} {
+      set sel [$w curselection]
+      if {$sel == ""} {return}
+      clipboard clear
+
+      set flag 0
+      foreach line $sel {
+         set x [$w get $line]
+        # if multiple line select, prepend newline
+         if {! $flag} {
+            incr flag
+         } else {
+            clipboard append "\n"
+         }
+         clipboard append $x
+      }
+   }
+
+
+   proc tk_entryGetSelection {w} {
+      set tmp ""
+      if {! [$w selection present]} {return $tmp}
+      set a [$w index sel.first]
+      set b [$w index sel.last]
+      set tmp [string range [$w get] $a [expr $b - 1]]
+      return $tmp
+   }
+
+
+   proc tk_entryCut {w} {
+      set x [tk_entryGetSelection $w]
+      clipboard clear
+      clipboard append $x
+      $w delete sel.first sel.last
+   }
+
+
+   proc tk_entryCopy {w} {
+      set x [tk_entryGetSelection $w]
+      clipboard clear
+      clipboard append $x
+   }
+
+
+   proc tk_entryPaste {w} {
+      if {[$w selection present]} {
+         $w delete sel.first sel.last
+      }
+      set sel ""
+      catch {set sel [selection get -selection CLIPBOARD]}
+      $w insert insert $sel
+   }
+
+
+  # end

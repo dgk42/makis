@@ -1,0 +1,95 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #-------------------------
+  # PRINT ROUTINES
+  #-------------------------
+
+  # to be sourced directly into the teasegui namespace
+
+
+   #
+   # Print routines
+   #
+   proc PrintTextWidget {} {
+      variable var
+      set txt $var(activetext)
+
+      set font [$txt cget -font]
+      
+
+      set fontstr "[font configure $font -family] [font configure $font -size]"
+      Print $txt -title [wm title [winfo toplevel $txt]] \
+         -font $fontstr -pagefont $fontstr
+   }
+
+
+   #...........................................................................
+   # Routines provided with Iain Findleton's tkPrint package, used here inline
+   # instead of sourced in... just for convenience.
+   #...........................................................................
+   proc SetPrintRoutines {} {
+    package require Tkprint 1.1
+    proc RaiseWindowToTop { w } {
+     wm iconify $w
+     wm deiconify $w
+    }
+    proc GrabWindow { w { file "capture.bmp" } } {
+     RaiseWindowToTop $w
+     after 250 "GrabIt $w $file"
+     puts stdout "Wait capture of $w ..."
+    }
+    proc GrabIt { w file } {
+     Capture $w -file $file
+     puts stdout "Window $w captured to file $file!"
+    }
+    proc PrintAWindow { w { title "" } } {
+     RaiseWindowToTop $w
+     after 250 "PrintIt $w \"$title\""
+     puts stdout "Wait printing of $w ..."
+    }
+    proc PrintIt { w title } {
+     if { $title != "" } {
+      PrintWindow $w -title $title
+     } else {
+      PrintWindow $w
+     }
+     puts stdout "Window $w printed!"
+    }
+    proc GetTextToPrint { w } {
+     set lines ""
+     catch { set lines [$w get sel.first sel.last] }
+     if { $lines == "" } {set lines [$w get 1.0 end]}
+     return $lines
+    }
+    proc ConfigureCaptureWindow { w title } {
+     if { $title != "" } {
+      wm title $w "$title"
+      update idletasks;
+     }
+    }
+   }
+   #.........................
+   # end of tkPrint routines
+   #.........................
+
+

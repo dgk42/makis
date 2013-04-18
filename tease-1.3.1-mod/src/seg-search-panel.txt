@@ -1,0 +1,324 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #--------------
+  # SEARCH PANEL
+  #--------------
+
+  # to be sourced directly into the teasegui namespace
+
+   proc BuildSearchbar {w} {
+      global opt
+      variable default
+
+     # search frame
+      grid [
+         frame $w.s -bd 2 -relief groove
+      ] -row 1 -column 0 -sticky ew -columnspan 2 -ipadx 10
+
+      grid [
+         button $w.s.label01 -text search: -width 10 -bd 1
+      ] -row 0 -column 1 -sticky e
+
+      bind $w.s.label01 <Button-3> [list teasegui::EntryGrabFromText $w $w.s.entry_search]
+      bind $w.s.label01 <Button-1> [list $w.s.entry_search delete 0 end]
+      bind $w.s.label01 <Double-Button-1> [list teasegui::EntryGrabFromText $w $w.s.entry_search]
+      bind $w.s.label01 <Triple-Button-1> [list $w.s.entry_search delete 0 end]
+
+      grid [
+         button $w.s.label02 -text replace: -width 10 -bd 1
+      ] -row 1 -column 1 -sticky e
+
+      bind $w.s.label02 <Button-3> [list teasegui::EntryGrabFromText $w $w.s.entry_replace]
+      bind $w.s.label02 <Button-1> [list $w.s.entry_replace delete 0 end]
+      bind $w.s.label02 <Double-Button-1> [list teasegui::EntryGrabFromText $w $w.s.entry_replace]
+      bind $w.s.label02 <Triple-Button-1> [list $w.s.entry_replace delete 0 end]
+
+      grid [
+         checkbutton $w.s.case -text "case sensitive" -variable opt(casesens$w)
+      ] -row 0 -column 0 -sticky w
+      set opt(casesens$w) $default(casesensitive)
+
+      grid [
+         checkbutton $w.s.regexp -text "regular expression" -variable opt(regexp$w)
+      ] -row 1 -column 0 -sticky w
+      set opt(regexp$w) $default(regexp)
+
+
+      grid [
+         entry $w.s.entry_search
+      ] -row 0 -column 2 -sticky news -pady 4 -ipady 2 -padx 4
+      bind $w.s.entry_search <Button-3> "teasegui::CCPMenuBind %W"
+      bind $w.s.entry_search <Key-Return> [list teasegui::Search $w forward]
+
+      grid [
+         entry $w.s.entry_replace
+      ] -row 1 -column 2 -sticky news -pady 4 -ipady 2 -padx 4
+      bind $w.s.entry_replace <Button-3> "teasegui::CCPMenuBind %W"
+      bind $w.s.entry_replace <Key-Return> [list teasegui::Replace $w forward]
+
+
+     # search direction buttons
+      grid [
+         button $w.s.searchlt  \
+            -text "< search"   \
+            -width 10 -bd 1    \
+            -repeatdelay 300   \
+            -repeatinterval 75 \
+            -command [list teasegui::Search $w backward]
+      ] -row 0 -column 3 -sticky ew
+      grid [
+         button $w.s.searchrt  \
+            -text "search >"   \
+            -width 10 -bd 1    \
+            -repeatdelay 300   \
+            -repeatinterval 75 \
+            -command [list teasegui::Search $w forward]
+      ] -row 0 -column 4 -sticky ew
+
+     # replace direction buttons
+      grid [
+         button $w.s.replacelt \
+            -text "< replace"  \
+            -width 10 -bd 1    \
+            -repeatdelay 300   \
+            -repeatinterval 75 \
+            -command [list teasegui::Replace $w backward]
+      ] -row 1 -column 3 -sticky ew
+      grid [
+         button $w.s.replacert \
+            -text "replace >"  \
+            -width 10 -bd 1    \
+            -repeatdelay 300   \
+            -repeatinterval 75 \
+            -command [list teasegui::Replace $w forward]
+      ] -row 1 -column 4 -sticky ew
+
+      grid [label $w.s.dummy -text ""] -row 0 -column 5
+
+      grid [
+         button $w.s.searchall \
+            -text "search all"  \
+            -width 10 -bd 1    \
+            -command [list teasegui::SearchAll $w]
+      ] -row 0 -column 6 -columnspan 2 -sticky ew
+
+     # replace all direction buttons
+      grid [
+         button $w.s.alllt \
+            -text "<< all" \
+            -width 6 -bd 1 \
+            -command [list teasegui::ReplaceAll $w backward]
+      ] -row 1 -column 6 -sticky ew
+      grid [
+         button $w.s.allrt \
+            -text "all >>" \
+            -width 6 -bd 1 \
+            -command [list teasegui::ReplaceAll $w forward]
+      ] -row 1 -column 7 -sticky ew
+
+      if {! $default(showsearchbar)} {
+         global show
+         set show($w.s) 0
+         Show/Hide $w.s
+      }
+   }
+
+
+   proc EntryGrabFromText {root tgt} {
+      variable var
+      set txt $var(activetext)
+      set sel [$txt tag ranges sel]
+
+      if {$sel == ""} {return}
+
+      set data [eval $txt get $sel]
+      $tgt insert end $data
+   }
+
+
+   proc SearchAll {w} {
+      global opt
+      variable files
+      variable default
+
+      set out ${w}.o.txt
+
+     # delete any existing tags and text in out widget?
+      $out delete 1.0 end
+      foreach tag [$out tag names] {
+         $out tag delete $tag
+      }
+
+      foreach name [array names files *,txt] {
+         regsub {,txt$} $name "" idx
+         set filename $files($idx,name)
+
+         set txt $files($name)
+         set result 1.0
+
+         while {$result != ""} {
+            set cmd [list $txt search -forward]
+            if {! $opt(casesens$w)} {lappend cmd "-nocase"}
+            if {$opt(regexp$w)}     {lappend cmd "-regexp"} else {lappend cmd "-exact"}
+            set pattern [$w.s.entry_search get]
+            if {$pattern == ""} {return}
+            lappend cmd "-count" "size" "--" "$pattern" "$result" "end"
+            set result [eval $cmd]
+            if {$result != ""} {
+               set line [lindex [split $result .] 0]
+               set num  [lindex [split $result .] 1]
+               set data [$txt get ${line}.0 ${line}.end]
+
+               set tag "link${txt}${result}"
+               $out tag configure $tag \
+                  -foreground $default(selectforeground) \
+                  -background $default(selectbackground)
+               $out tag bind $tag <ButtonRelease-1> [list teasegui::JumpToText $txt $result $size]
+               $out tag bind $tag <Enter> "teasegui::RolloverLinkEffect $out $tag enter"
+               $out tag bind $tag <Leave> "teasegui::RolloverLinkEffect $out $tag leave"
+               $out insert end "${filename},  line ${line}: "
+               $out insert end "$data" $tag
+               $out insert end "\n\n"
+               set result $line.[expr $num + 1]
+            }
+         }
+      }
+
+     # make sure our output window is showing
+      global show
+      set show($w.o) 1
+      Show/Hide $w.o
+   }
+
+
+   proc RolloverLinkEffect {widget tag direction} {
+      variable default
+      set fg $default(selectbackground)
+      set bg $default(selectforeground)
+      set cursor hand2
+
+      if {$direction == "leave"} {
+         set fg $default(selectforeground)
+         set bg $default(selectbackground)
+         set cursor xterm
+      }
+      $widget tag configure $tag -foreground $fg -background $bg
+      $widget configure -cursor $cursor
+   }
+
+   proc JumpToText {txt loc len} {
+      variable var
+
+      set idx [GetTextIndex $txt]
+      if {$var(mode) == "single"} {
+         SingleModeFileSelectIndex [winfo toplevel $txt] $idx
+      }
+
+      set left  [lindex [split $loc .] 0]
+      set right [lindex [split $loc .] 1]
+      focus $txt
+      $txt mark set insert $loc
+      $txt tag remove sel 1.0 end
+      $txt tag add sel $loc "$left.[expr $right + $len]"
+      $txt see $loc
+   }
+
+
+   proc Search {w direction {wrap 1}} {
+      global opt
+      variable var
+
+      set txt $var(activetext)
+      set found 0
+   
+     # start command building
+      set cmd [list $txt search "-$direction"]
+   
+      if {! $opt(casesens$w)} {lappend cmd "-nocase"}
+      if {$opt(regexp$w)}     {lappend cmd "-regexp"} else {lappend cmd "-exact"}
+   
+      set pattern [$w.s.entry_search get]
+      if {$pattern == ""} {return}
+      set index [$txt index insert]
+   
+      lappend cmd "-count" "size" "--" "$pattern" "$index"
+      if {! $wrap} {
+         set stop end
+         if {$direction == "backward"} {set stop 1.0}
+         lappend cmd "$stop"
+      }
+   
+      set result [eval $cmd]
+      $txt tag remove sel 1.0 end
+   
+      if {$result != ""} {
+         focus $txt
+         $txt mark set insert $result
+         set left  [lindex [split $result .] 0]
+         set right [lindex [split $result .] 1]
+         $txt tag add sel $result "$left.[expr $right + $size]"
+         $txt see $result
+   
+         if {$direction == "forward"} {
+            $txt mark set insert "$left.[expr $right + $size]"
+         }
+         ShowCursorPosition $txt $w.c.lab02
+         set found 1
+      }
+      return $found
+   }
+   
+   
+   proc Replace {w direction {wrap 1}} {
+      variable var
+
+      set txt $var(activetext)
+      set sel [$txt tag ranges sel]
+   
+      if {[llength $sel] > 0} {
+   #
+   #  need to check if what's currently selected matches.  If not, don't replace.
+   #
+         set idx0 [lindex $sel 0]
+         $txt delete $idx0 [lindex $sel 1]
+         set str [$w.s.entry_replace get]
+         $txt insert $idx0 $str sel
+      }
+      set foundanother [Search $w $direction $wrap]
+      return $foundanother
+   }
+   
+   
+   proc ReplaceAll {w direction} {
+      variable var
+
+      set txt $var(activetext)
+      set pattern [$w.s.entry_search get]
+      if {$pattern == ""} {return}
+      while {[Replace $w $direction 0]} { }
+   }
+
+
+
+
+# end

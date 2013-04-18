@@ -1,0 +1,26 @@
+
+# begin dest.txt
+outenv = auxbuild.do_build_proj(env, proj, params, ARGUMENTS)
+sub_proj = auxfun.list_from_str_dict(params, 'sub_proj')
+if sub_proj:
+	Export({"outenv." + proj : outenv})
+	j = 0
+	for i in sub_proj:
+		x = i.split("%")
+		vdir = auxfun.get_obj_dir(outenv, x[0])
+		auxfun.set_dir_inc_base(auxfun.list_from_str_dict(params, 'sub_proj')[j])
+		if len(x) > 1:
+			SConscript(['%s/SConscript' % x[0]],
+				variant_dir = vdir, src_dir = x[1], duplicate = 0)
+		else:
+			SConscript(
+				['%s/SConscript' % x[0]],
+				variant_dir = vdir, duplicate = 0)
+		j += 1
+
+if 'install' in COMMAND_LINE_TARGETS:
+	auxbuild.do_install(outenv)
+
+if 'uninstall' in COMMAND_LINE_TARGETS:
+	auxbuild.do_uninstall(outenv)
+# end dest.txt

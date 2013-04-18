@@ -1,0 +1,522 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #---------------------
+  # BOOKMARK COMPONENTS
+  #---------------------
+
+  # to be sourced directly into the teasegui namespace
+
+   variable marx
+   set marx(bookmarkfields) [list name file view call]
+   set marx(bookmarknames)  {}
+   set marx(bookmarkorder)  {}
+
+   global gui
+   set gui(bookmarkactions) [
+      list encrypt decrypt run {sort increasing} {sort decreasing} \
+         {sort increasing unique} {sort decreasing unique}
+   ]
+
+
+
+   proc JumpBookmark {top idx} {
+      variable marx
+      variable files
+      variable var
+
+      set file $marx(file,$idx)
+      set view $marx(view,$idx)
+      set call $marx(call,$idx)
+
+      set idx ""
+
+     # can't assume that the file is open or not... gotta find out
+      foreach path [array names files *,path] {
+         if {$path == ""} {continue}
+
+         if {$files($path) == $file} {
+            regsub {,path$} $path "" idx
+            set txt $files($idx,txt)
+            set idx [GetTextIndex $txt]
+            if {$var(mode) == "single"} {
+               SingleModeFileSelectIndex [winfo toplevel $txt] $idx
+            }
+            break
+         }
+      }
+
+     # ...if it's not already open, try to open it.  Gracefully.
+      if {$idx == ""} {
+         if {((![file exists $file]) || (![file isfile $file]))} {
+            set msg "The file pointed to by this bookmark:\n\n"
+            append msg "$file\n\nis not readable."
+            tk_messageBox -message $msg
+            return
+         }
+         eval OpenFile $file
+      }
+
+      set txt $var(activetext)
+
+      focus $txt
+      set cursor   [lindex [split $view] 0]
+      set fraction [lindex [split $view] 1]
+
+     # handle various sundries, set view, etc...
+      $txt yview moveto $fraction
+      if {$cursor == ""} {set cursor 1.0}
+      $txt mark set insert $cursor
+      set top [winfo toplevel $txt]
+      ShowCursorPosition $txt $top.c.lab02
+
+     # and if there's an action, do it!
+      switch $call {
+         encrypt {teasegui::CryptText Encrypt $top}
+         decrypt {teasegui::CryptText Decrypt $top}
+         run {teasegui::ExecWindow $top}
+         {sort increasing} {teasegui::SortContents -increasing 0}
+         {sort decreasing} {teasegui::SortContents -decreasing 0}
+         {sort increasing unique} {teasegui::SortContents -increasing -unique}
+         {sort decreasing unique} {teasegui::SortContents -decreasing -unique}
+         default {}
+      }
+   }
+
+
+
+   proc AddBookmark {args} {
+      variable marx
+      variable files
+      global tmpmarx
+
+     #
+     # does file exist on disk yet?
+     # if we don't have a path in the files array, it hasn't
+     # been saved, so notify and bail
+     #
+      set idx [GetActiveTextIndex]
+
+
+     # active text index can still be returned if NO windows are open,
+     # so check if we have any actual file to set.  If not, bail.
+      if {[array names files $idx,path] == ""} {
+         return
+      }
+
+      set tmpmarx(file) $files($idx,path)
+
+      if {[regexp {^\s*$} $tmpmarx(file)]} {
+         set msg "You must first save this file before adding it to bookmarks."
+         tk_messageBox -message $msg
+         return
+      }
+
+     # set the necessary values... path, name, view, and call
+     # call = possible function call after opening, eg: encrypt
+      set tmpmarx(name) $files($idx,name)
+      set tmpmarx(call) ""
+
+     # get cursor position (insert index) and yview fraction
+      set tmpmarx(view) "[$files($idx,txt) index insert] [lindex [$files($idx,txt) yview] 0]"
+
+     # cleared all the tests so add it... kick up the add GUI.
+      set w .bkmk
+      LaunchAddBookmarkGUI $w
+      tkwait window $w
+
+      if {$tmpmarx(exitvalue) == 0} {
+         array unset tmpmarx
+         return
+      }
+
+     #
+     # first, find highest num idx of existing bookmarks,
+     # set it to 0 if we don't have any bookmarks, and then
+     # kick it up one more (that being a quasi-unique number)
+     #
+      set tmp [lindex [lsort [array names marx name,*]] end]
+      if {[llength $tmp] < 1} {set tmp 0}
+      regsub {^name,} $tmp "" next
+      incr next
+
+      set marx(name,$next) $tmpmarx(name)
+      set marx(view,$next) $tmpmarx(view)
+      set marx(call,$next) $tmpmarx(call)
+      set marx(file,$next) $tmpmarx(file)
+
+      array unset tmpmarx
+
+      lappend marx(bookmarkorder) $next
+      lappend marx(bookmarknames) $marx(name,$next)
+   }
+
+
+   proc LaunchManageBookmarkGUI {w} {
+      variable marx
+      global gui
+
+      set gui(bookmarkorder) $marx(bookmarkorder)
+      set gui(bookmarknames) $marx(bookmarknames)
+
+      if {[winfo exists $w]} {destroy $w}
+      toplevel $w
+      wm resizable $w 0 0
+      wm title $w "Manage bookmarks"
+      wm withdraw $w
+      wm protocol $w WM_DELETE_WINDOW [list destroy $w]
+
+      pack [
+         frame $w.a
+      ] -side top -fill both -padx 3 -pady 3 -expand on
+
+      pack [
+         frame $w.a.t -bd 2 -relief groove
+      ] -side top -fill x -expand on -padx 3 -pady 3 -ipady 8 -ipadx 8
+
+
+      listbox $w.a.t.lbx -listvariable gui(bookmarkorder)
+
+
+      grid [
+         listbox $w.a.t.lb -listvariable gui(bookmarknames) \
+            -exportselection 0
+      ] -row 1 -column 0 -sticky news -rowspan 9
+      bind $w.a.t.lb <<ListboxSelect>> "teasegui::HandleLBSelectEvent %W $w.a.t.lbx"
+
+      foreach key $marx(bookmarkfields) idx {1 2 3 4} {
+         grid [
+            label $w.a.t.label$key -text $key
+         ] -column 2 -row $idx -sticky e -padx 5
+
+         if {$key == "call"} {
+            grid [
+               droplist::droplist  $w.a.t.entry$key  \
+                  -textvariable tmpmarx($key)        \
+                  -listvariable gui(bookmarkactions)
+            ] -column 3 -row $idx -sticky ew -pady 5 -padx 5
+            droplist::Set $w.a.t.entry$key ""
+
+         } else {
+
+            grid [
+               entry $w.a.t.entry$key -textvariable tmpmarx($key) -width 40
+            ] -column 3 -row $idx -padx 5 -pady 5 -sticky ew
+
+         }
+      }
+
+
+     # item control button frame
+      grid [
+         frame $w.a.t.b
+      ] -column 2 -row 6 -columnspan 5 -sticky e
+
+      pack [
+         button $w.a.t.b.set -text save -width 10 \
+            -command "teasegui::SetBookmarkChange $w"
+      ] -side left -padx 15
+
+      pack [
+         button $w.a.t.b.new -text new  -width 10 \
+            -command "teasegui::CreateNewBookmarkEntry $w"
+      ] -side left
+
+      pack [
+         button $w.a.t.b.del -text delete -width 10 \
+            -command "teasegui::DeleteBookmarkEntry $w"
+      ] -side left -padx 15
+
+
+     # dialog control button row
+      pack [
+         frame $w.a.b -bd 2 -relief ridge
+      ] -side bottom -fill x -padx 3 -pady 3
+
+      pack [
+         button $w.a.b.ok -width 10 -text OK -command [
+            list teasegui::DestroyManageBookmarkGUI $w
+         ]
+      ] -side right
+
+
+     # if there are bookmarks, select the first one before opening window
+      if {[llength $gui(bookmarkorder)] > 0} {
+         $w.a.t.lb selection set 0
+         HandleLBSelectEvent $w.a.t.lb $w.a.t.lbx
+      }
+
+
+      CenterWindowInScreen $w
+      wm deiconify $w
+      raise $w
+      focus $w
+      grab $w
+   }
+
+
+   proc HandleLBSelectEvent {w tgt} {
+      variable marx
+      global tmpmarx
+      global gui
+
+      set top [winfo toplevel $w]
+      set tmp [$w curselection]
+      if {$tmp == ""} {return}
+      set idx [$tgt get $tmp]
+      foreach key $marx(bookmarkfields) {
+         if {$key == "call"} {
+            droplist::Set $top.a.t.entry$key $marx($key,$idx)
+         } else {
+            set tmpmarx($key) $marx($key,$idx)
+         }
+      }
+   }
+
+
+   proc DeleteBookmarkEntry {w} {
+      variable marx
+      global tmpmarx
+      global gui
+
+      set lb   $w.a.t.lb
+      set lb2  $w.a.t.lbx
+      set idx  [$lb curselection]
+      if {$idx == ""} {return}
+      set idx2 [$lb2 get $idx]
+
+     # prompt to delete!
+      set msg "Delete the following bookmark?\n\n"
+      append msg "Name:\t$marx(name,$idx2)\n"
+      append msg "File:\t$marx(file,$idx2)\n"
+      append msg "View:\t$marx(view,$idx2)\n"
+      append msg "Call:\t$marx(call,$idx2)\n"
+      set tmp [
+         tk_messageBox -type yesno -message $msg \
+            -title "Delete bookmark?" -icon question
+      ]
+      if {$tmp == "no"} {return}
+
+
+     # we've got the go ahead to delete, so go ahead
+      $lb  delete $idx
+      $lb2 delete $idx
+      array unset marx *,$idx2
+
+     # now set lb selection if we can
+      set size [$lb size]
+      if {$size < 1} {return}
+      if {$size <= $idx} {set idx end}
+      $w.a.t.lb selection set $idx
+      HandleLBSelectEvent $lb $lb2
+   }
+
+
+
+   proc CreateNewBookmarkEntry {w} {
+      variable marx
+      global tmpmarx
+      global gui
+
+     #
+     # first, find highest num idx of existing bookmarks,
+     # set it to 0 if we don't have any bookmarks, and then
+     # kick it up one more (that being a quasi-unique number)
+     #
+      set tmp [lindex [lsort [array names marx name,*]] end]
+      if {[llength $tmp] < 1} {set tmp 0}
+      regsub {^name,} $tmp "" next
+      incr next
+
+      lappend gui(bookmarkorder) $next
+      lappend gui(bookmarknames) "< new bookmark >"
+
+      set tmpmarx(name) "< new bookmark >"
+      set tmpmarx(view) {1.0 0}
+      droplist::Set $w.a.t.entrycall ""
+      set tmpmarx(file) ""
+
+      set marx(name,$next) $tmpmarx(name)
+      set marx(view,$next) $tmpmarx(view)
+      set marx(call,$next) [droplist::Get $w.a.t.entrycall]
+      set marx(file,$next) $tmpmarx(file)
+      $w.a.t.lb selection clear 0 end
+      $w.a.t.lb selection set end
+   }
+
+
+
+   proc SetBookmarkChange {w} {
+      variable marx
+      global tmpmarx
+      global gui
+
+     # get the idx of the selection, but it's the stored idx
+     # in the unmapped listbox that we need to go from.
+      set top  [winfo toplevel $w]
+      set lb   $w.a.t.lb
+      set lb2  $w.a.t.lbx
+      set idx  [$lb curselection]
+      set idx2 [$lb2 get $idx]
+
+      foreach key $marx(bookmarkfields) {
+         if {$key == "call"} {
+            set marx($key,$idx2) [droplist::Get $top.a.t.entry$key]
+         } else {
+            set marx($key,$idx2) $tmpmarx($key)
+         }
+        # set marx($key,$idx2) $tmpmarx($key)
+      }
+
+      set name [$lb get $idx]
+      if {$name != $marx(name,$idx2)} {
+         set gui(bookmarknames) [
+            lreplace $gui(bookmarknames) $idx $idx $marx(name,$idx2)
+         ]
+      }
+   }
+
+
+   proc DestroyManageBookmarkGUI {w} {
+      variable marx
+      global   tmpmarx
+      global   gui
+
+      set marx(bookmarkorder) $gui(bookmarkorder)
+      set marx(bookmarknames) $gui(bookmarknames)
+
+      destroy $w
+      SaveSettings
+   }
+
+
+   proc LaunchAddBookmarkGUI {w} {
+      global tmpmarx
+      global gui
+      variable marx
+
+      if {[winfo exists $w]} {destroy $w}
+      toplevel $w
+      wm title $w "Add bookmark $tmpmarx(name)"
+      wm withdraw $w
+      wm protocol $w WM_DELETE_WINDOW [list teasegui::DestroyAddBookmarkGUI $w 0]
+
+      pack [
+         frame $w.a
+      ] -side top -fill both -padx 3 -pady 3 -expand on
+
+      pack [
+         frame $w.a.t -bd 2 -relief groove
+      ] -side top -fill x -expand on -padx 3 -pady 3 -ipady 8
+
+      foreach key $marx(bookmarkfields) idx {0 1 2 3} {
+         grid [
+            label $w.a.t.label$key -text $key
+         ] -column 0 -row $idx -sticky e -padx 5
+
+         if {$key == "call"} {
+            grid [
+               droplist::droplist  $w.a.t.entry$key  \
+                  -textvariable tmpmarx($key)        \
+                  -listvariable gui(bookmarkactions)
+            ] -column 1 -row $idx -sticky ew -pady 5 -padx 5
+            droplist::Set $w.a.t.entry$key ""
+
+         } else {
+
+            grid [
+               entry $w.a.t.entry$key -textvariable tmpmarx($key) -width 40
+            ] -column 1 -row $idx -padx 5 -pady 5 -sticky ew
+
+         }
+      }
+      grid columnconfigure $w.a.t 1 -weight 1
+
+
+     # dialog control button row
+      pack [
+         frame $w.a.b -bd 2 -relief ridge
+      ] -side bottom -fill x -padx 3 -pady 3
+
+      pack [
+         button $w.a.b.cancel -width 10 -text Cancel -command [
+            list teasegui::DestroyAddBookmarkGUI $w 0
+         ]
+      ] -side right
+
+      pack [
+         button $w.a.b.ok -width 10 -text OK -command [
+            list teasegui::DestroyAddBookmarkGUI $w 1
+         ]
+      ] -side right
+
+
+      CenterWindowInScreen $w
+      wm deiconify $w
+      raise $w
+      focus $w
+      grab $w
+   }
+
+
+   proc DestroyAddBookmarkGUI {w retval} {
+      global tmpmarx
+      set tmpmarx(call) [droplist::Get $w.a.t.entrycall]
+      set tmpmarx(exitvalue) $retval
+      destroy $w
+      SaveSettings
+   }
+
+
+   proc PostBookmarksMenu {menubutton} {
+      variable var
+      variable marx
+      global gui
+
+      set top [winfo toplevel $menubutton]
+      .marx delete 0 end
+
+      .marx add command -label "Add to bookmarks..." -command [
+         list teasegui::AddBookmark
+      ]
+      .marx add command -label "Manage bookmarks..." -command [
+         list teasegui::LaunchManageBookmarkGUI .bkmk
+      ]
+      .marx add separator
+
+     # foreach idx [] name $var(bookmarknames) {
+     #    .marx add command -label $name -command [
+     #       list teasegui::JumpBookmark $top $idx
+     #    ]
+     # }
+      foreach idx $marx(bookmarkorder) name $marx(bookmarknames) {
+         .marx add command -label $name -command [
+            list teasegui::JumpBookmark $top $idx
+         ]
+      }
+
+      .marx post [expr 10 + [winfo rootx $menubutton]] \
+         [expr [winfo height $menubutton] + [winfo rooty $menubutton]]
+   }
+
+
+# end bookmarks segment

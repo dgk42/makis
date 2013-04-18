@@ -1,0 +1,312 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #--------------------
+  # COMMENT COMPONENTS
+  #--------------------
+
+  # to be sourced directly into the teasegui namespace
+
+   proc SetComment {top ext} {
+      variable comment
+      variable default
+      set newcomment $default(comment)
+
+      set ext [string tolower $ext]
+      foreach key [array names comment] {
+         set lowval [string tolower $comment($key)]
+         if {[lsearch -exact $lowval $ext] >= 0} {
+            set newcomment $key
+            break
+         }
+      }
+      ${top}.mb.comment delete 0 end
+      ${top}.mb.comment insert 0 $newcomment
+   }
+
+
+   proc CommentMenuBind {menubutton} {
+      variable var
+      variable comment
+
+      .comment delete 0 end
+
+      set tgt [winfo parent $menubutton].comment
+      set current [$tgt get]
+
+      if {[lsearch [font names] BOLD] == -1} {
+         font create BOLD
+      }
+
+      foreach item [lsort [array names comment]] {
+         .comment add command -label $item -command [list teasegui::SetCommentFromMenu $item $tgt]
+         if {$current == $item} {
+            eval font configure BOLD [font actual [$menubutton cget -font]]
+            eval font configure BOLD -weight bold
+            .comment entryconfigure end -font BOLD
+         }
+      }
+
+      .comment add separator
+      foreach item $var(commentmodes) {
+         .comment add radiobutton -label "Mode: $item" -variable var(commentmode) -value $item
+      }
+
+      .comment add separator
+      .comment add command -label "Configure..." -command teasegui::LaunchCommentDialog
+
+      .comment post [expr 10 + [winfo rootx $menubutton]] \
+         [expr [winfo height $menubutton] + [winfo rooty $menubutton]]
+   }
+
+
+   proc LaunchCommentDialog {} {
+     # variable var
+      variable comment
+   
+      if {[winfo exists .com]} {destroy .com}
+      toplevel .com
+      wm withdraw .com
+
+
+      grid [
+         frame .com.t -bd 2 -relief groove
+      ] -row 0 -column 0 -sticky news -padx 2 -pady 2 -ipadx 10
+      grid [
+         label .com.t.lab01 -text "Comment/File Extension configuration" -font BOLD
+      ] -row 0 -column 0 -sticky w -padx 5
+      grid [
+         label .com.t.lab02 -text "Comment String\n<3 spaces> Corresponding file types (space-delimited list)" -justify left
+      ] -row 1 -column 0 -sticky w -padx 5
+   
+      grid [
+         frame .com.t.f -bd 2 -relief sunken
+      ] -row 2 -column 0 -sticky news -pady 5 -padx 5
+      grid [
+         text .com.t.f.txt -bd 0 -width 50 -height 14 -yscrollcommand ".com.t.f.vsb set"
+      ] -row 0 -column 0 -sticky news
+      grid [
+         scrollbar .com.t.f.vsb -command ".com.t.f.txt yview"
+      ] -row 0 -column 1 -sticky ns
+   
+   
+      grid [
+         frame .com.b -bd 2 -relief ridge
+      ] -row 10 -column 0 -sticky ew -padx 2 -pady 2
+      pack [
+         button .com.b.apply -text Apply -width 8 \
+            -command [list teasegui::CommentFileTypesSave .com.t.f.txt]
+      ] -side right
+      pack [
+         button .com.b.cancel -text Cancel -width 8 \
+            -command [list destroy .com]
+      ] -side right
+      pack [
+         button .com.b.ok -text OK -width 8 \
+            -command "teasegui::CommentFileTypesSave .com.t.f.txt; destroy .com"
+      ] -side right
+   
+      grid rowconfigure    .com 0 -weight 1
+      grid rowconfigure    .com 1 -weight 0
+      grid columnconfigure .com 0 -weight 1
+      grid rowconfigure    .com.t 0 -weight 0
+      grid rowconfigure    .com.t 1 -weight 0
+      grid rowconfigure    .com.t 2 -weight 1
+      grid columnconfigure .com.t 0 -weight 1
+      grid rowconfigure    .com.t.f 0 -weight 1
+      grid columnconfigure .com.t.f 0 -weight 1
+      grid columnconfigure .com.t.f 1 -weight 0
+   
+      foreach c [lsort [array names comment]] {
+         .com.t.f.txt insert end "$c\n"
+         if {[array names comment -exact $c] != ""} {
+            .com.t.f.txt insert end "   $comment($c)\n"
+         }
+      }
+   
+   
+      CenterWindowInScreen .com
+      update
+      wm deiconify .com
+      raise .com
+   }
+
+
+   proc CommentFileTypesSave {txt} {
+      variable comment
+   
+     # read text widget contents
+      set data [$txt get 1.0 end]
+   
+     # ensure scope of tmp and key
+      array set tmp {}
+      set key ""
+   
+     # loop thru data string contents and set to associative array.
+     # lines beginning with no spaces are array KEYS, lines starting
+     # with 3 spaces are VALUES.
+      foreach line [split $data \n] {
+         if {[regexp {^\S+} $line]} {
+            set key $line
+            set tmp($key) ""
+         } else {
+            regsub {^   } $line "" str
+            if {$tmp($key) == ""} {
+               set tmp($key) $str
+            } elseif {! [regexp {^\s*$} $line]} {
+               append tmp($key) "\n$str"
+            }
+         }
+      }
+   
+     # make sure we don't save anything extra
+      array unset comment
+      foreach key [array names tmp] {
+         set comment($key) $tmp($key)
+      }
+      SaveSettings
+   }
+
+
+   proc SetCommentFromMenu {comment entry} {
+      $entry delete 0 end
+      $entry insert end $comment
+   }
+
+
+   proc Comment {txt on} {
+     # variable var
+      variable default
+
+      set top [winfo toplevel $txt]
+      set c [$top.mb.comment get]
+
+     # assemble our list of lines to hit...
+     # if no selection, just get current line
+      set sel [$txt tag ranges sel]
+      if {$sel != ""} {
+         set line0 [lindex [split [lindex $sel 0] .] 0]
+         set line1 [lindex [split [lindex $sel 1] .] 0]
+         if {[lindex [split [lindex $sel 1] .] 1] == 0} {
+            incr line1 -1
+         }
+      } else {
+         set line0 [lindex [split [$txt index insert] .] 0]
+         set line1 $line0
+      }
+
+      if {$on} {
+        # inserting comments
+         set count 0
+         set idx0 0
+
+        # if comment is multi-line, should be handled differently
+         if {[regexp {^\S+ \S+$} $c]} {
+            if {$sel == ""} {return}
+            set pt0 [lindex $sel 0]
+            set pt1 [lindex $sel 1]
+            set fore [lindex $c 0]
+            set aft  [lindex $c 1]
+            $txt insert $pt1 $aft  sel
+            $txt insert $pt0 $fore sel
+            return
+         }
+
+        # need a prelim runthrough to determine block's leftmost edge
+         if {$default(commentmode) == "block"} {
+            set edge 1000
+            for {set i $line0} {$i <= $line1} {incr i} {
+               set line [$txt get ${i}.0 ${i}.end]
+               set firstchar [string index [string trimleft $line] 0]
+               set candidate [string first $firstchar $line]
+               if {$candidate < $edge} {set edge $candidate}
+            }
+            set idx0 $edge
+            if {$edge > 0} {set idx0 [expr $edge - 1]}
+         }
+
+         for {set i $line0} {$i <= $line1} {incr i} {
+            if {$default(commentmode) != "left"} {
+               if {$default(commentmode) == "contour"} {
+                 # find the first non-whitespace
+                  set line [$txt get ${i}.0 ${i}.end]
+                  set firstchar [string index [string trimleft $line] 0]
+                  set idx0 [string first $firstchar $line]
+                  if {$idx0 > 1} {
+                     set idx0 [expr $idx0 - 1]
+                  } else {
+                     set idx0 0
+                  }
+               }
+            }
+            incr count
+            $txt insert ${i}.$idx0 $c
+         }
+
+      } else {
+
+        #-------------------
+        # removing comments
+        #-------------------
+
+        # if comment is multi-line, should be handled differently
+         if {[regexp {^\S+ \S+$} $c]} {
+            if {$sel == ""} {return}
+            set pt0 [lindex $sel 0]
+            set pt1 [lindex $sel 1]
+            set fore [lindex $c 0]
+            set aft  [lindex $c 1]
+            set res0 [$txt search -forward  -exact -- $fore $pt0 $pt1]
+            set res1 [$txt search -backward -exact -- $aft $pt1 $pt0]
+            
+            if {(($res0 >= 0) && ($res1 >= 0))} {
+               set res0fore [lindex [split $res0 .] 0]
+               set res0aft  [expr [lindex [split $res0 .] 1] + [string length $fore]]
+               set res1fore [lindex [split $res1 .] 0]
+               set res1aft  [expr [lindex [split $res1 .] 1] + [string length $aft]]
+               $txt delete $res1 "${res1fore}.${res1aft}"
+               $txt delete $res0 "${res0fore}.${res0aft}"
+            }
+            return
+         }
+
+         for {set i $line0} {$i <= $line1} {incr i} {
+
+           # find our comment
+            set idx0 [$txt search -forward -exact -- $c ${i}.0 ${i}.end]
+            if {$idx0 == ""} {continue}
+
+           # ...now make sure there's only whitespace before it.
+            if {[regexp {^\s*$} [$txt get ${i}.0 $idx0]]} {
+               set aft [lindex [split $idx0 .] 1]
+               set len [string length $c]
+               $txt delete $idx0 ${i}.[expr $aft + $len]
+            }
+         }
+      }
+   }
+
+
+
+
+
+# end

@@ -1,0 +1,273 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #--------------
+  # COLOR DIALOG 
+  #--------------
+
+  # to be sourced directly into the teasegui namespace
+
+   proc LaunchColorDialog {top} {
+      variable var
+      variable default
+      global tmpcolor
+      if {[winfo exists .color]} {destroy .color}
+
+     # pull color configuration from current window
+      set tmpcolor(bg_nor) [$var(activetext) cget -bg]
+      set tmpcolor(bg_sel) [$var(activetext) cget -selectbackground]
+      set tmpcolor(fg_nor) [$var(activetext) cget -fg]
+      set tmpcolor(fg_sel) [$var(activetext) cget -selectforeground]
+
+     # pull apply other color configuration from default
+      set tmpcolor(colorothertext) $default(colorothertext)
+
+      toplevel .color
+      wm withdraw .color
+      wm transient .color $top
+      wm protocol .color WM_DELETE_WINDOW teasegui::DestroyColorWindow
+
+     # dialog control button row
+      pack [
+         frame .color.b -bd 2 -relief ridge
+      ] -side bottom -fill x -padx 3 -pady 3
+
+      pack [
+         button .color.b.apply -width 10 -text Apply \
+            -command [list teasegui::SetColorFromDialog $var(activetext)]
+      ] -side right
+
+      pack [
+         button .color.b.cancel -width 10 -text Cancel -command teasegui::DestroyColorWindow
+      ] -side right
+
+      pack [
+         button .color.b.ok -width 10 -text OK \
+            -command [list teasegui::DestroyColorWindow teasegui::SetColorFromDialog $var(activetext)]
+      ] -side right
+
+      pack [
+         button .color.b.def -width 10 -text "Set default" \
+            -command [list teasegui::SetColorDefaultFromDialog $tmpcolor(bg_nor)]
+      ] -side left
+
+      pack [
+         button .color.b.all -width 10 -text "Apply to all" \
+            -command [list teasegui::ApplyColorToAllFromDialog]
+      ] -side left
+
+
+     # color buttons and such
+      pack [
+         frame .color.f -bd 2 -relief groove
+      ] -side top -fill both -padx 3 -pady 3 -ipady 10
+
+      grid [
+         label .color.f.nor -text "normal text" \
+            -width 20 -bg $tmpcolor(bg_nor) -fg $tmpcolor(fg_nor) -bd 2 -relief groove
+      ] -row 0 -column 0 -pady 8 -padx 10
+
+      grid [
+         label .color.f.lab01 -text "text:"
+      ] -row 0 -column 1
+      grid [
+         entry .color.f.norfg -width 10 -textvariable tmpcolor(fg_nor)
+      ] -row 0 -column 2
+      grid [
+         label .color.f.lab02 -text "   background:"
+      ] -row 0 -column 3
+      grid [
+         entry .color.f.norbg -width 10 -textvariable tmpcolor(bg_nor)
+      ] -row 0 -column 4
+      grid [
+         label .color.f.dummy -text "  "
+      ] -row 0 -column 5
+
+
+      grid [
+         label .color.f.sel -text "selection text" \
+            -width 20 -bg $tmpcolor(bg_sel) -fg $tmpcolor(fg_sel) -bd 2 -relief groove
+      ] -row 1 -column 0 -padx 10
+
+      grid [
+         label .color.f.lab03 -text "text:"
+      ] -row 1 -column 1
+      grid [
+         entry .color.f.selfg -width 10 -textvariable tmpcolor(fg_sel)
+      ] -row 1 -column 2
+      grid [
+         label .color.f.lab04 -text "   background:"
+      ] -row 1 -column 3
+      grid [
+         entry .color.f.selbg -width 10 -textvariable tmpcolor(bg_sel)
+      ] -row 1 -column 4
+
+      grid [
+         checkbutton .color.f.other -variable tmpcolor(colorothertext) \
+            -text "Use these colors on all text-like areas"
+      ] -row 2 -column 0 -columnspan 5 -pady 8
+
+     # bindings
+      bind .color.f.selbg <Double-Button-1> "teasegui::LaunchColorSelector %W .color.f.sel -bg"
+      bind .color.f.selfg <Double-Button-1> "teasegui::LaunchColorSelector %W .color.f.sel -fg"
+      bind .color.f.selbg <Key-Return> "teasegui::SetColorEnterKey %W .color.f.sel -bg"
+      bind .color.f.selfg <Key-Return> "teasegui::SetColorEnterKey %W .color.f.sel -fg"
+      bind .color.f.norbg <Double-Button-1> "teasegui::LaunchColorSelector %W .color.f.nor -bg"
+      bind .color.f.norfg <Double-Button-1> "teasegui::LaunchColorSelector %W .color.f.nor -fg"
+      bind .color.f.norbg <Key-Return> "teasegui::SetColorEnterKey %W .color.f.nor -bg"
+      bind .color.f.norfg <Key-Return> "teasegui::SetColorEnterKey %W .color.f.nor -fg"
+
+      CenterWindowInScreen .color
+      wm deiconify .color
+      raise .color
+      focus .color
+      grab .color
+   }
+
+   proc SetColorEnterKey {src tgt attribute} {
+      set color [$src get]
+      if {$color == ""} {return}
+      $tgt configure $attribute $color
+   }
+
+   proc LaunchColorSelector {src tgt attribute} {
+      set startcolor [$src get]
+      set result [
+         tk_chooseColor -initialcolor $startcolor -parent [winfo toplevel $src]
+      ]
+      if {$result == ""} {return}
+      $src delete 0 end
+      $src insert end $result
+      $tgt configure $attribute $result
+   }
+
+   proc SetColorDefaultFromDialog {txt} {
+      variable default
+      global tmpcolor
+      set default(foreground)       [.color.f.norfg get]
+      set default(background)       [.color.f.norbg get]
+      set default(selectforeground) [.color.f.selfg get]
+      set default(selectbackground) [.color.f.selbg get]
+      set default(colorothertext)   $tmpcolor(colorothertext)
+      SaveSettings
+   }
+
+
+   proc GetTextlikeWidgets {} {
+      set path [winfo children .]
+      set widgets {}
+
+      while {[llength $path] > 0} {
+         set tmp [lindex $path 0]
+         set path [lreplace $path 0 0]
+
+         foreach child [winfo children $tmp] {
+            lappend path $child
+            set class [winfo class $child]
+            if {((($class == "Listbox") || ($class == "Entry")) &&
+                  (! [regexp {\..*\.mb\.comment} $child]))} {
+               lappend widgets $child
+            }
+         }
+      }
+      return $widgets
+   }
+
+
+   proc ApplyColorToAllFromDialog {} {
+      variable var
+      variable files
+      global   tmpcolor
+
+      set fg  [.color.f.norfg get]
+      set bg  [.color.f.norbg get]
+      set sfg [.color.f.selfg get]
+      set sbg [.color.f.selbg get]
+      set oth $tmpcolor(colorothertext)
+
+      set widgets {}
+      if {$oth} {
+         set widgets [GetTextlikeWidgets]
+      }
+
+      foreach key [array names files *,txt] {
+         lappend widgets $files($key)
+         set top [winfo toplevel $files($key)]
+
+#         if {$oth} {
+#GetTextlikeWidgets
+#            if {$var(mode) == "single"} {
+#               lappend widgets $top.f.lb
+#            }
+#            lappend widgets $top.o.txt
+#         }
+      }
+
+      foreach t [lsort -unique $widgets] {
+         $t configure -foreground $fg
+         $t configure -background $bg
+         $t configure -selectforeground $sfg
+         $t configure -selectbackground $sbg
+      }
+   }
+
+   proc SetColorFromDialog {txt} {
+      $txt configure -fg [.color.f.norfg get]
+      $txt configure -bg [.color.f.norbg get]
+      $txt configure -selectforeground [.color.f.selfg get]
+      $txt configure -selectbackground [.color.f.selbg get]
+   }
+
+   proc CenterWindowInScreen { w } {
+      update
+      set width [winfo reqwidth $w]
+      set height [winfo reqheight $w]
+      set x [expr {( [winfo screenwidth  $w] - $width  ) / 2 }]
+      set y [expr {( [winfo screenheight $w] - $height ) / 2 }]
+   
+      wm geometry $w +${x}+${y}
+   }
+
+   proc DestroyColorWindow {args} {
+      if {[llength $args] > 0} {
+         eval $args
+      }
+      global tmpcolor
+      array unset tmpcolor
+      destroy .color
+   }
+
+   proc SetColorValue {font att widget} {
+      set tmp ""
+      if {[winfo class $widget] == "Frame"} {
+         set tmp [droplist::Get $widget]
+      } else {
+         set v [$widget cget -variable]
+         upvar $v newv
+         set tmp $newv
+      }
+      font configure $font $att $tmp
+   }
+
+
+# end
+

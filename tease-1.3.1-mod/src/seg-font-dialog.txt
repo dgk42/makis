@@ -1,0 +1,232 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #--------------
+  # FONT DIALOG 
+  #--------------
+
+  # to be sourced directly into the teasegui namespace
+
+   proc LaunchFontDialog {top} {
+      variable var
+      if {[winfo exists .font]} {destroy .font}
+
+     # pull font configuration from current window
+      set basefont [$var(activetext) cget -font]
+      set fontdescription [font actual $basefont]
+      eval font create TMPFONT $fontdescription
+
+      toplevel .font
+      wm withdraw .font
+      wm transient .font $top
+      wm protocol .font WM_DELETE_WINDOW teasegui::DestroyFontWindow
+
+     # dialog control button row
+      pack [
+         frame .font.b -bd 2 -relief ridge
+      ] -side bottom -fill x -padx 3 -pady 3
+
+      pack [
+         button .font.b.apply -width 10 -text Apply \
+            -command [list teasegui::SetFontFromDialog $basefont TMPFONT]
+      ] -side right
+
+      pack [
+         button .font.b.cancel -width 10 -text Cancel -command teasegui::DestroyFontWindow
+      ] -side right
+
+      pack [
+         button .font.b.ok -width 10 -text OK \
+            -command [list teasegui::DestroyFontWindow teasegui::SetFontFromDialog $basefont TMPFONT]
+      ] -side right
+
+      pack [
+         button .font.b.def -width 10 -text "Set default" \
+            -command [list teasegui::SetFontDefaultFromDialog $basefont TMPFONT]
+      ] -side left
+
+      pack [
+         button .font.b.all -width 10 -text "Apply to all" \
+            -command [list teasegui::ApplyFontToAllFromDialog $basefont TMPFONT]
+      ] -side left
+
+
+      namespace eval :: {
+         global var
+         set var(fontlist) [lsort [font families]]
+         set var(fontsize) [list 6 7 8 9 10 11 12 13 14 15 16 18 20 22 24 26 28 30 32 34 36 40 44 48 52 56 60 64 68 72]
+      }
+
+      pack [
+         canvas .font.c -height 120 -width 400 -bd 2 -relief groove
+      ] -side top -fill both -expand on
+
+      .font.c create text  10 58 -text "The quick brown fox jumps over the lazy dog." -anchor w -font TMPFONT
+     # .font.c create text  200 60 -text "The quick brown fox jumps over the lazy dog." -anchor center -font TMPFONT
+
+      pack [
+         frame .font.cfg
+      ] -side top -fill x -padx 4 -pady 10
+
+      pack [
+         droplist::droplist .font.cfg.fam \
+            -listvariable var(fontlist) \
+            -selectcommand [list teasegui::SetFontValue TMPFONT -family .font.cfg.fam]
+      ] -side left
+      droplist::Set .font.cfg.fam [font actual TMPFONT -family]
+
+      pack [
+         droplist::droplist .font.cfg.siz -width 3 \
+            -listvariable var(fontsize) \
+            -selectcommand [list teasegui::SetFontValue TMPFONT -size .font.cfg.siz]
+      ] -side left
+      droplist::Set .font.cfg.siz [font actual TMPFONT -size]
+
+      EncodeFontWidgetImages
+
+      global tmpbold
+      pack [
+         checkbutton .font.cfg.bld -image ICON_BOLD -variable tmpbold \
+            -onvalue bold -offvalue normal -indicatoron 0 -bd 1 \
+            -command [list teasegui::SetFontValue TMPFONT -weight .font.cfg.bld]
+      ] -side left -ipady 0
+      set tmpbold [font actual TMPFONT -weight]
+
+      global tmpital
+      pack [
+         checkbutton .font.cfg.ita -image ICON_ITALIC -variable tmpital \
+            -onvalue italic -offvalue roman -indicatoron 0 -bd 1 \
+            -command [list teasegui::SetFontValue TMPFONT -slant .font.cfg.ita]
+      ] -side left
+      set tmpital [font actual TMPFONT -slant]
+
+      CenterWindowInScreen .font
+      wm deiconify .font
+      raise .font
+      focus .font
+      grab .font
+   }
+
+   proc SetFontDefaultFromDialog {basefont dialogfont} {
+      variable default
+      set fontdescription [font actual $dialogfont]
+      set default(font) $fontdescription
+      SaveSettings
+   }
+
+   proc ApplyFontToAllFromDialog {basefont dialogfont} {
+      variable var
+      variable files
+
+      set fontdescription [font actual $dialogfont]
+     
+      foreach t [array names files *,txt] {
+         set f [$files($t) cget -font]
+         eval font configure $f $fontdescription
+      }
+   }
+
+   proc SetFontFromDialog {basefont dialogfont} {
+      set fontdescription [font actual $dialogfont]
+      eval font configure $basefont $fontdescription
+   }
+
+   proc CenterWindowInScreen { w } {
+      update
+      set width [winfo reqwidth $w]
+      set height [winfo reqheight $w]
+      set x [expr {( [winfo screenwidth  $w] - $width  ) / 2 }]
+      set y [expr {( [winfo screenheight $w] - $height ) / 2 }]
+   
+      wm geometry $w +${x}+${y}
+   }
+
+   proc EncodeFontWidgetImages {args} {
+      image create photo ICON_BOLD -data {
+         R0lGODlhDAALAPcAAAAAAAEBAQICAgcHBwgICAkJCREREBwcGyMjISUkIyYl
+         IykoJy8uLDIxLzo5Nzs6Nzs6OEJBPkdGQ1FPTFZVUllXU19eWmdlYXl2cn17
+         dpCNiJeUj6OgmqilnqmmoKqmoLazrLu4sL26s8PAuMTBucvHv8zJwc3Jws/L
+         w9HNxdLOxtPPx9TQyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAACH5BAEAACwALAAAAAAMAAsAAAhlAFmQ8ECQ4AcR
+         LBKyGHEAAIAGChxmUMjCAYABLE4IAHCBIgQABEBECDChhEeHBhIUoEDi5AAV
+         KBgAWJBC4UcCCTE45KDwAciEFRx2SGgCAYAAFiQEADBhRcIQGqJG3RCCotWr
+         AQEAOw==
+      }
+      image create photo ICON_ITALIC -data {
+         R0lGODlhDAALAPcAAAAAAAMDAwQEBAYGBggIByopKCsqKC4tLDo5Nz49O0NC
+         QEdGQ29taXNwbHp3c3t4dH17dn98eISBfIaEf4iFgIqIgsG+tsTAucfDvMnG
+         vtPPx9TQyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         AAAAAAAAAAAAAAAAAAAAACH5BAEAABsALAAAAAAMAAsAAAhEADcIFAihgEEG
+         AxNWAADAgIaEAxcwfABRYAYCAAJYqLiBAkMEHDckYCiB4wUBAAZg4BiBoQKO
+         Gg4wnMCxgcECDkLqDAgAOw==
+      }
+   }
+
+   proc DestroyFontWindow {args} {
+      if {[llength $args] > 0} {
+         eval $args
+      }
+      font delete TMPFONT
+      destroy .font
+   }
+
+   proc SetFontValue {font att widget} {
+      set tmp ""
+      if {[winfo class $widget] == "Frame"} {
+         set tmp [droplist::Get $widget]
+      } else {
+         set v [$widget cget -variable]
+         upvar $v newv
+         set tmp $newv
+      }
+      font configure $font $att $tmp
+   }
+
+
+# end

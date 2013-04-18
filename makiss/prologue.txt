@@ -1,0 +1,28 @@
+# begin prologue.txt
+try:
+	from _makis import *
+	envstr = "outenv." + parent
+	Import(envstr)
+	outenv = globals()[envstr]
+except ImportError:
+	import os
+	import sys
+	srcpath = os.curdir
+	pathup = os.pardir
+	for i in range(8):
+		if os.path.isdir(os.path.join(srcpath, "_makis")):
+			sys.path.append(srcpath)
+			break
+		srcpath = os.path.join(srcpath, pathup)
+	else:
+		print "Cannot find _makis"
+		Exit(1)
+	from _makis import *
+	outenv = auxsetup.setconf(ARGUMENTS)
+except:
+	print "Cannot import environment"
+	Exit(1)
+if not 'VCONFIG' in outenv:
+	outenv['VCONFIG'] = 'debug'
+# end prologue.txt
+

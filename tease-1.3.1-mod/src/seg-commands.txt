@@ -1,0 +1,228 @@
+# TEASE : text editing and scripting environment
+#    version 1.3.1
+#    by chess hazlett
+#    http://tease.sourceforge.net
+# copyright (C) 2003-2005, Chess Hazlett
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+#--------------------------------------------------------------------
+
+  #--------------------
+  # COMMENT COMPONENTS
+  #--------------------
+
+  # to be sourced directly into the teasegui namespace
+
+   proc CommandMenuPost {menubutton} {
+      variable var
+      variable command
+
+      .command delete 0 end
+
+     #
+     # on windows, add EXPLORER and CMD PROMPT if there are no other commands
+     # configured in the array... sort of a head start kind of thing.
+     #
+      global tcl_platform
+      if {(($tcl_platform(platform) == "windows") &&
+           ([llength [array names command]] < 1))} {
+         set command(explore) "explorer \"%DIR%\""
+         set command(cmd_prompt) "cmd /x /k pushd \"%DIR%\" && call cmd"
+      }
+
+     # now populate the menu...
+      foreach item [lsort [array names command]] {
+         .command add command -label $item -command [
+            list teasegui::CommandMenuRun $item
+         ]
+      }
+
+      .command add separator
+      .command add command -label "Configure..." -command teasegui::LaunchCommandDialog
+
+     # ...and post it.
+      .command post [expr 10 + [winfo rootx $menubutton]] \
+         [expr [winfo height $menubutton] + [winfo rooty $menubutton]]
+   }
+
+
+   proc CommandMenuRun {item} {
+      global env
+      variable files
+      variable command
+
+      set idx [GetActiveTextIndex]
+
+     # if we have no windows open, we still need to be able to open commands,
+     # so set all items to empty first.
+      set filepath  ""
+      set directory ""
+      set filename  ""
+      set fileext   ""
+
+     # active text index can still be returned if NO windows are open,
+     # so check if we have any actual file to set.  If not, bail.
+      if {[array names files $idx,path] != ""} {
+         set filepath  $files($idx,path)
+         set directory $files($idx,dir)
+         set filename  $files($idx,name)
+         set fileext   $files($idx,ext)
+      }
+
+     # certain path requirements in windows
+      global tcl_platform
+      if {(($tcl_platform(platform) == "windows") && ([array names files $idx,path] != ""))} {
+         regsub -all {/} $files($idx,path) "\\\\\\\\\\\\\\\\" filepath
+         regsub -all {/} $files($idx,dir)  "\\\\\\\\\\\\\\\\" directory
+      }
+
+      regsub -all {%FILE%} $command($item) $filepath  str
+      regsub -all {%NAME%} $str $filename  str
+      regsub -all {%EXT%}  $str $fileext   str
+      regsub -all {%DIR%}  $str $directory str
+
+      set prompt [
+         tk_messageBox -type yesno -icon question \
+            -message "This will run the command:\n\n$str\n\nContinue?"
+      ]
+      if {$prompt == "no"} {return}
+
+      eval exec $str &
+   }
+
+
+   proc LaunchCommandDialog {} {
+      variable command
+   
+      if {[winfo exists .cmd]} {destroy .cmd}
+      toplevel .cmd
+      wm withdraw .cmd
+
+      if {[lsearch [font names] BOLD] == -1} {
+         font create BOLD
+         eval font configure BOLD [font actual [.command cget -font]]
+         eval font configure BOLD -weight bold
+      }
+
+      grid [
+         frame .cmd.t -bd 2 -relief groove
+      ] -row 0 -column 0 -sticky news -padx 2 -pady 2 -ipadx 10
+      grid [
+         label .cmd.t.lab01 -text "Custom command menu configuration" -font BOLD
+      ] -row 0 -column 0 -sticky w -padx 5
+      grid [
+         label .cmd.t.lab02 -text "Name for command\n<3 spaces> Command with %FILE%, %NAME%, %DIR%, and/or %EXT% variables included" -justify left
+      ] -row 1 -column 0 -sticky w -padx 5
+   
+      grid [
+         frame .cmd.t.f -bd 2 -relief sunken
+      ] -row 2 -column 0 -sticky news -pady 5 -padx 5
+      grid [
+         text .cmd.t.f.txt -bd 0 -width 50 -height 14 -yscrollcommand ".cmd.t.f.vsb set"
+      ] -row 0 -column 0 -sticky news
+      grid [
+         scrollbar .cmd.t.f.vsb -command ".cmd.t.f.txt yview"
+      ] -row 0 -column 1 -sticky ns
+   
+   
+      grid [
+         frame .cmd.b -bd 2 -relief ridge
+      ] -row 10 -column 0 -sticky ew -padx 2 -pady 2
+      pack [
+         button .cmd.b.apply -text Apply -width 8 \
+            -command [list teasegui::CommandSetSave .cmd.t.f.txt]
+      ] -side right
+      pack [
+         button .cmd.b.cancel -text Cancel -width 8 \
+            -command [list destroy .cmd]
+      ] -side right
+      pack [
+         button .cmd.b.ok -text OK -width 8 \
+            -command "teasegui::CommandSetSave .cmd.t.f.txt; destroy .cmd"
+      ] -side right
+   
+      grid rowconfigure    .cmd 0 -weight 1
+      grid rowconfigure    .cmd 1 -weight 0
+      grid columnconfigure .cmd 0 -weight 1
+      grid rowconfigure    .cmd.t 0 -weight 0
+      grid rowconfigure    .cmd.t 1 -weight 0
+      grid rowconfigure    .cmd.t 2 -weight 1
+      grid columnconfigure .cmd.t 0 -weight 1
+      grid rowconfigure    .cmd.t.f 0 -weight 1
+      grid columnconfigure .cmd.t.f 0 -weight 1
+      grid columnconfigure .cmd.t.f 1 -weight 0
+   
+      foreach c [lsort [array names command]] {
+         .cmd.t.f.txt insert end "$c\n"
+         if {[array names command -exact $c] != ""} {
+            .cmd.t.f.txt insert end "   $command($c)\n"
+         }
+      }
+   
+   
+      CenterWindowInScreen .cmd
+      update
+      wm deiconify .cmd
+      raise .cmd
+   }
+
+
+   proc CommandSetSave {txt} {
+      variable command
+   
+     # read text widget contents
+      set data [$txt get 1.0 end]
+   
+     # ensure scope of tmp and key
+      array set tmp {}
+      set key ""
+
+     # loop thru data string contents and set to associative array.
+     # lines beginning with no spaces are array KEYS, lines starting
+     # with 3 spaces are VALUES.
+      foreach line [split $data \n] {
+         if {[regexp {^\S+} $line]} {
+            set key $line
+            set tmp($key) ""
+         } else {
+            regsub {^   } $line "" str
+
+           # no lines at all is causing errors here, so move on gracefully
+            if {[array names tmp $key] == ""} {continue}
+
+            if {$tmp($key) == ""} {
+               set tmp($key) $str
+            } elseif {! [regexp {^\s*$} $line]} {
+               append tmp($key) "\n$str"
+            }
+         }
+      }
+   
+     # make sure we don't save anything extra
+      array unset command
+      foreach key [array names tmp] {
+         set command($key) $tmp($key)
+      }
+     # SaveSettings
+   }
+
+
+
+
+
+
+
+# end
