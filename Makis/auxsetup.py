@@ -137,7 +137,9 @@ def setconf(args):
 	x.post_set_env_vars(env)
 
 	if args.get('printvdir', '0') == '1':
-		print auxfun.get_intermediate_prefix(env)
+		#print auxfun.get_intermediate_prefix(env)
+		with open('prod.dirty', 'w') as f:
+			f.write(auxfun.get_intermediate_prefix(env))
 		Exit(0)
 
 	if 1 == colour:

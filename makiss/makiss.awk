@@ -305,6 +305,7 @@ BEGIN {
 	out_lib_shared_str="out_lib_shared"
 	out_bin_str="out_bin"
 	export_cc_headers_str="export_cc_headers"
+	out_merged_lib_shared_str="out_merged_lib_shared"
 	pdf_docs_str="pdfdocs"
 	required_libs_str="required_libs"
 	required_cc_headers_str="required_cc_headers"
@@ -456,6 +457,11 @@ BEGIN {
 	next
 }
 
+/^[ \t]*OUT_MERGED_LIB_SHARED (=|\+=) / {
+	out_merged_lib_shared_i=begin_compound(out_merged_lib_shared_str, out_merged_lib_shared, out_merged_lib_shared_i)
+	next
+}
+
 /^[ \t]*PDF_DOCS (=|\+=) / {
 	pdf_docs_i=begin_compound(pdf_docs_str, pdf_docs, pdf_docs_i)
 	next
@@ -585,6 +591,8 @@ NF {
 		libs_i=do_compound(libs, libs_i)
 	else if (export_cc_headers_str==mode)
 		export_cc_headers_i=do_compound(export_cc_headers, export_cc_headers_i)
+	else if (out_merged_lib_shared_str==mode)
+		out_merged_lib_shared_i=do_compound(out_merged_lib_shared, out_merged_lib_shared_i)
 	else if (pdf_docs_str==mode)
 		pdf_docs_i=do_compound(pdf_docs, pdf_docs_i)
 	else
@@ -633,6 +641,7 @@ END {
 	lib_paths_i=print_compound(lib_paths, lib_paths_i, lib_paths_str)
 	libs_i=print_compound(libs, libs_i, libs_str)
 	export_cc_headers_i=print_compound(export_cc_headers, export_cc_headers_i, export_cc_headers_str)
+	out_merged_lib_shared_i=print_compound(out_merged_lib_shared, out_merged_lib_shared_i, out_merged_lib_shared_str)
 	pdf_docs_i=print_compound(pdf_docs, pdf_docs_i, pdf_docs_str)
 	if (isroot)
 		sh_sed_replace_makis_file("dest.txt")

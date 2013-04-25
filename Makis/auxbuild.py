@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import sys
 import os
 import shutil
 from SCons.Script import *
@@ -42,7 +43,7 @@ def append_ld(env, libflags = None, libpaths = None, libs = None):
 
 def strip_if_release(env, target):
 	if auxfun.is_release_build(env) and env['STRIP_CMD']:
-		 AddPostAction(target, env['STRIP_CMD'] + ' ' + str(target[0]))
+		AddPostAction(target, env['STRIP_CMD'] + ' ' + str(target[0]))
 
 def do_build_proj(env = None, proj = None, params = None, args = None):
 	if params is None:
@@ -63,6 +64,7 @@ def do_build_proj(env = None, proj = None, params = None, args = None):
 	out_bin = auxfun.list_from_str_dict(params, 'out_bin')
 	pdfdocs = auxfun.list_from_str_dict(params, 'pdfdocs')
 	export_cc_headers = auxfun.list_from_str_dict(params, 'export_cc_headers')
+	out_merged_lib_shared = auxfun.list_from_str_dict(params, 'out_merged_lib_shared')
 
 	if env:
 		thisenv = env.Clone()
@@ -95,27 +97,28 @@ def do_build_proj(env = None, proj = None, params = None, args = None):
 			if required_libs:
 				for i in required_libs:
 					if not conf.CheckLib(i):
-						print 'Did not find library', i, 'exiting!'
+						print >> sys.stderr, 'Did not find library', i, 'exiting!'
 						Exit(1)
 			required_cc_headers = auxfun.list_from_str_dict(params, 'required_cc_headers')
 			if required_cc_headers:
 				for i in required_cc_headers:
 					if not conf.CheckHeader(i):
-						print 'Did not find C header file', i, 'exiting!'
+						print >> sys.stderr, 'Did not find C header file', i, 'exiting!'
 						Exit(1)
 			required_cxx_headers = auxfun.list_from_str_dict(params, 'required_cxx_headers')
 			if required_cxx_headers:
 				for i in required_cxx_headers:
 					if not conf.CheckCXXHeader(i):
-						print 'Did not find C++ header file', i, 'exiting!'
+						print >> sys.stderr, 'Did not find C++ header file', i, 'exiting!'
 						Exit(1)
 			required_funcs = auxfun.list_from_str_dict(params, 'required_funcs')
 			if required_funcs:
 				for i in required_funcs:
 					if not conf.CheckFunc(i):
-						print 'Did not find function', i, 'exiting!'
+						print >> sys.stderr, 'Did not find function', i, 'exiting!'
 						Exit(1)
 			thisenv = conf.Finish()
+			Exit(0)
 
 	obj = []
 	objunit = {}
@@ -132,7 +135,9 @@ def do_build_proj(env = None, proj = None, params = None, args = None):
 				objsopic.append(o2)
 
 	if units:
-		if auxfun.is_linux_targetplat(thisenv) or auxfun.is_mac_targetplat(thisenv) or auxfun.is_windows_targetplat(thisenv):
+		if auxfun.is_linux_targetplat(thisenv) or \
+		   auxfun.is_mac_targetplat(thisenv) or \
+		   auxfun.is_windows_targetplat(thisenv):
 			if not cpp_vars:
 				cpp_vars_tmp = list()
 			else:
@@ -182,6 +187,24 @@ def do_build_proj(env = None, proj = None, params = None, args = None):
 		for i in export_cc_headers:
 			thisenv.Cp_F(os.path.join(thisenv['INCDIR'], i), i)
 
+	if out_merged_lib_shared and libs:
+		if auxfun.is_vc98_build(thisenv):
+			print sys.stderr >> 'Merging libs is not supported for VC98 builds.'
+		else:
+			x = '$SHLINK -o $TARGET $SHLINKFLAGS $__RPATH $SOURCES $_LIBDIRFLAGS'
+			y = ' $_LIBFLAGS'
+			if auxfun.is_linux_targetplat(thisenv):
+				y = ' -Wl,--whole-archive $_LIBFLAGS -Wl,--no-whole-archive'
+			elif auxfun.is_mac_targetplat(thisenv):
+				y = ' -flat_namespace -undefined suppress -rdynamic -Wl,-all_load $_LIBFLAGS'
+			mrgenv = thisenv.Clone(SHLINKCOM = x + y,
+			                       LIBS = [])
+			mrgenv.Replace(LIBS = libs)
+			for i in out_merged_lib_shared:
+				target = mrgenv.SharedLibrary(os.path.join(thisenv['BINDIR'], i), \
+				                              cc_sources if cc_sources else [])
+				strip_if_release(mrgenv, target)
+
 	return thisenv
 
 def install_dir(env, target_dir, source_dir):
@@ -197,7 +220,7 @@ def install_dir(env, target_dir, source_dir):
 			#Chmod("$TARGET", 0664),
 			])
 	except:
-		print 'ERROR: Install failed:', target_dir
+		print >> sys.stderr, 'ERROR: Install failed:', target_dir
 
 def uninstall_dir(env, target_dir, phonyfile):
 	try:
@@ -208,7 +231,7 @@ def uninstall_dir(env, target_dir, phonyfile):
 			Delete("$SOURCE"),
 			])
 	except:
-		print 'ERROR: Uninstall failed:', target_dir
+		print >> sys.stderr, 'ERROR: Uninstall failed:', target_dir
 
 def do_install(env):
 	src = Dir(auxfun.get_bin_dir(env)).get_path()

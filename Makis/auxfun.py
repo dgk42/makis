@@ -112,8 +112,6 @@ def get_exe_extension(env):
 		return ''
 	elif is_windows_targetplat(env):
 		return '.exe'
-	elif is_bada_targetplat(env):
-		return '.exe'
 	return ''
 
 def get_class(kls):
