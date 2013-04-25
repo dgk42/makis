@@ -92,6 +92,12 @@ def do_build_proj(env = None, proj = None, params = None, args = None):
 
 	if args:
 		if args.get('projconf', '0') == '1' and auxfun.is_posix_plat(thisenv) and not thisenv.GetOption('clean'):
+			required_lib_paths = auxfun.list_from_str_dict(params, 'required_lib_paths')
+			if required_lib_paths:
+				thisenv.AppendUnique(LIBPATH = required_lib_paths)
+			required_inc_paths = auxfun.list_from_str_dict(params, 'required_inc_paths')
+			if required_inc_paths:
+				thisenv.AppendUnique(CPPPATH = required_inc_paths)
 			conf = Configure(thisenv)
 			required_libs = auxfun.list_from_str_dict(params, 'required_libs')
 			if required_libs:

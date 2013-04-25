@@ -308,8 +308,10 @@ BEGIN {
 	out_merged_lib_shared_str="out_merged_lib_shared"
 	pdf_docs_str="pdfdocs"
 	required_libs_str="required_libs"
+	required_lib_paths_str="required_lib_paths"
 	required_cc_headers_str="required_cc_headers"
 	required_cxx_headers_str="required_cxx_headers"
+	required_inc_paths_str="required_inc_paths"
 	required_funcs_str="required_funcs"
 
 	is_posix_plat_str="is_posix_plat"
@@ -367,6 +369,11 @@ BEGIN {
 	next
 }
 
+/^[ \t]*REQUIRED_LIB_PATHS (=|\+=) / {
+	required_lib_paths_i=begin_compound(required_lib_paths_str, required_lib_paths, required_lib_paths_i)
+	next
+}
+
 /^[ \t]*REQUIRED_CC_HEADERS (=|\+=) / {
 	required_cc_headers_i=begin_compound(required_cc_headers_str, required_cc_headers, required_cc_headers_i)
 	next
@@ -374,6 +381,11 @@ BEGIN {
 
 /^[ \t]*REQUIRED_CXX_HEADERS (=|\+=) / {
 	required_cxx_headers_i=begin_compound(required_cxx_headers_str, required_cxx_headers, required_cxx_headers_i)
+	next
+}
+
+/^[ \t]*REQUIRED_INC_PATHS (=|\+=) / {
+	required_inc_paths_i=begin_compound(required_inc_paths_str, required_inc_paths, required_inc_paths_i)
 	next
 }
 
@@ -555,10 +567,14 @@ NF {
 		next
 	else if (required_libs_str==mode)
 		required_libs_i=do_compound(required_libs, required_libs_i)
+	else if (required_lib_paths_str==mode)
+		required_lib_paths_i=do_compound(required_lib_paths, required_lib_paths_i)
 	else if (required_cc_headers_str==mode)
 		required_cc_headers_i=do_compound(required_cc_headers, required_cc_headers_i)
 	else if (required_cxx_headers_str==mode)
 		required_cxx_headers_i=do_compound(required_cxx_headers, required_cxx_headers_i)
+	else if (required_inc_paths_str==mode)
+		required_inc_paths_i=do_compound(required_inc_paths, required_inc_paths_i)
 	else if (required_funcs_str==mode)
 		required_funcs_i=do_compound(required_funcs, required_funcs_i)
 	else if (sub_proj_str==mode)
@@ -623,8 +639,10 @@ END {
 	printf ("\n")
 	print "params = {}\n"
 	required_libs_i=print_compound(required_libs, required_libs_i, required_libs_str)
+	required_lib_paths_i=print_compound(required_lib_paths, required_lib_paths_i, required_lib_paths_str)
 	required_cc_headers_i=print_compound(required_cc_headers, required_cc_headers_i, required_cc_headers_str)
 	required_cxx_headers_i=print_compound(required_cxx_headers, required_cxx_headers_i, required_cxx_headers_str)
+	required_inc_paths_i=print_compound(required_inc_paths, required_inc_paths_i, required_inc_paths_str)
 	required_funcs_i=print_compound(required_funcs, required_funcs_i, required_funcs_str)
 	sub_proj_i=print_compound(sub_proj, sub_proj_i, sub_proj_str)
 	cc_sources_i=print_compound(cc_sources, cc_sources_i, cc_sources_str)
