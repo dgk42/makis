@@ -91,39 +91,40 @@ def do_build_proj(env = None, proj = None, params = None, args = None):
 		thisenv.AppendUnique(LINKFLAGS = add_link_flg)
 
 	if args:
-		if args.get('projconf', '0') == '1' and auxfun.is_posix_plat(thisenv) and not thisenv.GetOption('clean'):
-			required_lib_paths = auxfun.list_from_str_dict(params, 'required_lib_paths')
-			if required_lib_paths:
-				thisenv.AppendUnique(LIBPATH = required_lib_paths)
-			required_inc_paths = auxfun.list_from_str_dict(params, 'required_inc_paths')
-			if required_inc_paths:
-				thisenv.AppendUnique(CPPPATH = required_inc_paths)
-			conf = Configure(thisenv)
-			required_libs = auxfun.list_from_str_dict(params, 'required_libs')
-			if required_libs:
-				for i in required_libs:
-					if not conf.CheckLib(i):
-						print >> sys.stderr, 'Did not find library', i, 'exiting!'
-						Exit(1)
-			required_cc_headers = auxfun.list_from_str_dict(params, 'required_cc_headers')
-			if required_cc_headers:
-				for i in required_cc_headers:
-					if not conf.CheckHeader(i):
-						print >> sys.stderr, 'Did not find C header file', i, 'exiting!'
-						Exit(1)
-			required_cxx_headers = auxfun.list_from_str_dict(params, 'required_cxx_headers')
-			if required_cxx_headers:
-				for i in required_cxx_headers:
-					if not conf.CheckCXXHeader(i):
-						print >> sys.stderr, 'Did not find C++ header file', i, 'exiting!'
-						Exit(1)
-			required_funcs = auxfun.list_from_str_dict(params, 'required_funcs')
-			if required_funcs:
-				for i in required_funcs:
-					if not conf.CheckFunc(i):
-						print >> sys.stderr, 'Did not find function', i, 'exiting!'
-						Exit(1)
-			thisenv = conf.Finish()
+		if args.get('projconf', '0') == '1':
+			if (auxfun.is_posix_plat(thisenv) or auxfun.is_mac_plat(thisenv)) and not thisenv.GetOption('clean'):
+				required_lib_paths = auxfun.list_from_str_dict(params, 'required_lib_paths')
+				if required_lib_paths:
+					thisenv.AppendUnique(LIBPATH = required_lib_paths)
+				required_inc_paths = auxfun.list_from_str_dict(params, 'required_inc_paths')
+				if required_inc_paths:
+					thisenv.AppendUnique(CPPPATH = required_inc_paths)
+				conf = Configure(thisenv)
+				required_libs = auxfun.list_from_str_dict(params, 'required_libs')
+				if required_libs:
+					for i in required_libs:
+						if not conf.CheckLib(i):
+							print >> sys.stderr, 'Did not find library', i, 'exiting!'
+							Exit(1)
+				required_cc_headers = auxfun.list_from_str_dict(params, 'required_cc_headers')
+				if required_cc_headers:
+					for i in required_cc_headers:
+						if not conf.CheckHeader(i):
+							print >> sys.stderr, 'Did not find C header file', i, 'exiting!'
+							Exit(1)
+				required_cxx_headers = auxfun.list_from_str_dict(params, 'required_cxx_headers')
+				if required_cxx_headers:
+					for i in required_cxx_headers:
+						if not conf.CheckCXXHeader(i):
+							print >> sys.stderr, 'Did not find C++ header file', i, 'exiting!'
+							Exit(1)
+				required_funcs = auxfun.list_from_str_dict(params, 'required_funcs')
+				if required_funcs:
+					for i in required_funcs:
+						if not conf.CheckFunc(i):
+							print >> sys.stderr, 'Did not find function', i, 'exiting!'
+							Exit(1)
+				thisenv = conf.Finish()
 			Exit(0)
 
 	obj = []
