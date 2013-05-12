@@ -42,7 +42,7 @@ def append_ld(env, libflags = None, libpaths = None, libs = None):
 		env.AppendUnique(LIBS = libs)
 
 def strip_if_release(env, target):
-	if auxfun.is_release_build(env) and env['STRIP_CMD']:
+	if auxfun.is_release_build(env) and env['STRIP_CMD'] and env['WILL_STRIP'] == '1':
 		AddPostAction(target, env['STRIP_CMD'] + ' ' + str(target[0]))
 
 def do_build_proj(env = None, proj = None, params = None, args = None):

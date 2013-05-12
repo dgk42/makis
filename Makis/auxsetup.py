@@ -53,7 +53,7 @@ def setconf(args):
 		targetplat = 'l64'
 		targetbits = '64'
 	elif -1 != string.find(env['PLATFORM'], 'darwin'):
-		targetplat = 'mac64'
+		targetplat = 'm64'
 		targetbits = '64'
 	elif -1 != string.find(env['PLATFORM'], 'win') and -1 != string.find(env['PLATFORM'], '32'):
 		targetplat = 'w32'
@@ -67,11 +67,11 @@ def setconf(args):
 	elif args.get('vtargetplat') == 'l64':
 		targetplat = 'l64'
 		targetbits = '64'
-	elif args.get('vtargetplat') == 'mac32':
-		targetplat = 'mac32'
+	elif args.get('vtargetplat') == 'm32':
+		targetplat = 'm32'
 		targetbits = '32'
-	elif args.get('vtargetplat') == 'mac64':
-		targetplat = 'mac64'
+	elif args.get('vtargetplat') == 'm64':
+		targetplat = 'm64'
 		targetbits = '64'
 	elif args.get('vtargetplat') == 'w32':
 		targetplat = 'w32'
@@ -134,6 +134,7 @@ def setconf(args):
 	env['VLLVMGCC'] = isllvmgcc
 	env['VVC98'] = isvc98
 	env['VCONFIG'] = targetenvarg
+	env['WILL_STRIP'] = args.get('stripped', '1')
 	x.post_set_env_vars(env)
 
 	if args.get('printvdir', '0') == '1':

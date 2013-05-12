@@ -8,10 +8,11 @@ Type: 'scons vconfig=release' to build the production program,
       'scons uninstall' to remove binaries.
       More options:
       'vtargetplat=l32' for linux 32-bit build target (default: linux 64-bit),
-      'vtargetplat=mac32' for mac os x 32-bit build target,
-      'vtargetplat=mac64' for mac os x 64-bit build target,
+      'vtargetplat=m32' for mac os x 32-bit build target,
+      'vtargetplat=m64' for mac os x 64-bit build target,
       'vtargetplat=w32' for ms windows 32-bit build target,
       'vtargetplat=w64' for ms windows 64-bit build target,
+      'stripped=0' for not stripping release binaries (default: 1),
       'vllvmgcc=1', to use llvm-gcc on linux (default: gcc)
       'vw32vc98=1' to use ms vc98 compiler on ms windows (default: mingw),
       'projconf=1' to check project configuration,

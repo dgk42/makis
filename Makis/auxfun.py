@@ -66,7 +66,7 @@ def is_linux_targetplat(env):
 	return 0
 
 def is_mac_targetplat(env):
-	if env['VTARGETPLAT'] == 'mac32' or env['VTARGETPLAT'] == 'mac64':
+	if env['VTARGETPLAT'] == 'm32' or env['VTARGETPLAT'] == 'm64':
 		return 1
 	return 0
 
